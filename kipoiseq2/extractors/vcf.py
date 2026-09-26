@@ -72,12 +72,12 @@ class MultiSampleVCF(VariantFetcher, VCF):
         variants = iter(self)
         yield from batch_iter(variants, batch_size=batch_size)
 
-    def query_variants(self, intervals: List[Interval], sample_id=None, progress=False) -> VariantIntervalQueryable:
+    def query_variants(self, intervals: List[Interval], sample_id=None) -> VariantIntervalQueryable:
         """Fetch variants for given multi-intervals from vcf file
         for sample if sample id is given.
 
         # Arguments
-            intervals (List[pybedtools.Interval]): list of Interval objects
+            intervals (List[Interval]): list of Interval objects
             sample_id (str, optional): sample id in vcf file.
 
         # Returns
@@ -96,9 +96,9 @@ class MultiSampleVCF(VariantFetcher, VCF):
             ```
         """
         pairs = [(self.fetch_variants(i, sample_id=sample_id), i) for i in intervals]
-        return VariantIntervalQueryable(self, pairs, progress=progress)
+        return VariantIntervalQueryable(self, pairs)
 
-    def query_all(self, progress=False) -> VariantIntervalQueryable:
+    def query_all(self) -> VariantIntervalQueryable:
         """Convert all variants into queryable object without interval so
         interval filters will not work.
 
@@ -112,7 +112,7 @@ class MultiSampleVCF(VariantFetcher, VCF):
             ```
         """
         pairs = [(iter(self), None)]
-        return VariantIntervalQueryable(self, pairs, progress=progress)
+        return VariantIntervalQueryable(self, pairs)
 
     def get_variant(self, variant: Union[Variant, str]) -> Variant:
         """Returns variant from vcf file. Lets you use vcf file as dict.

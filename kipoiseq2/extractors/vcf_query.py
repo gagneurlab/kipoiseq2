@@ -2,8 +2,6 @@ import abc
 import csv
 from typing import Iterable, List, Optional, Sequence, Tuple
 
-from tqdm import tqdm
-
 from kipoiseq2.dataclasses import Interval, Variant
 
 __all__ = [
@@ -102,7 +100,7 @@ _VariantIntervalType = Sequence[Tuple[Iterable[Variant], Optional[Interval]]]
 
 
 class VariantIntervalQueryable:
-    def __init__(self, vcf, variant_intervals: _VariantIntervalType, progress=False):
+    def __init__(self, vcf, variant_intervals: _VariantIntervalType):
         """
         Query object of variants.
 
@@ -112,12 +110,9 @@ class VariantIntervalQueryable:
         """
         self.vcf = vcf
         self.variant_intervals = variant_intervals
-        self.progress = progress
 
     def __iter__(self):
-        variant_intervals = tqdm(self.variant_intervals) if self.progress else self.variant_intervals
-
-        for variants, interval in variant_intervals:
+        for variants, interval in self.variant_intervals:
             yield from variants
 
     def iter_intervals(self):

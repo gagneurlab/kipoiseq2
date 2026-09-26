@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -95,12 +97,10 @@ def test_pad_sequences():
 @pytest.mark.parametrize("anchor", ["start", "end", "center"])
 @pytest.mark.parametrize("ilen", [3, 4])
 def test_resize_interval(anchor, ilen):
-    import pybedtools
-
     dummy_start, dummy_end = 10, 20
     dummy_center = int((dummy_start + dummy_end) / 2)
 
-    dummy_inter = pybedtools.create_interval_from_list(["chr2", dummy_start, dummy_end, "intname"])
+    dummy_inter = SimpleNamespace(chrom="chr2", start=dummy_start, end=dummy_end, name="intname")
     ret_inter = resize_interval(dummy_inter, ilen, anchor)
 
     # the original interval was left intact
@@ -114,7 +114,7 @@ def test_resize_interval(anchor, ilen):
     assert ret_inter.name == "intname"
 
     # desired output width
-    assert ret_inter.length == ilen
+    assert ret_inter.end - ret_inter.start == ilen
 
     # correct anchor point
     if anchor == "start":
@@ -127,12 +127,10 @@ def test_resize_interval(anchor, ilen):
 
 def test_ResizeInterval():
     """Same test as before"""
-    import pybedtools
-
     dummy_start, dummy_end = 10, 20
     dummy_center = int((dummy_start + dummy_end) / 2)
     ilen = 4
-    dummy_inter = pybedtools.create_interval_from_list(["chr2", dummy_start, dummy_end, "intname"])
+    dummy_inter = SimpleNamespace(chrom="chr2", start=dummy_start, end=dummy_end, name="intname")
     ri = ResizeInterval(ilen, "center")
     ret_inter = ri(dummy_inter)
     assert int((ret_inter.start + ret_inter.end) / 2) == dummy_center
@@ -148,4 +146,4 @@ def test_ResizeInterval():
     assert ret_inter.name == "intname"
 
     # desired output width
-    assert ret_inter.length == ilen
+    assert ret_inter.end - ret_inter.start == ilen

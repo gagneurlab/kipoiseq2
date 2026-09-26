@@ -3,10 +3,10 @@
 [![CI](https://github.com/kipoi/kipoiseq2/actions/workflows/ci.yml/badge.svg)](https://github.com/kipoi/kipoiseq2/actions/workflows/ci.yml)
 
 Sequence extractors and transforms for DNA sequence-based models.
-kipoiseq2 extracts reference and variant sequences from FASTA, VCF and GTF files and encodes them for model input, e.g. as one-hot arrays.
+kipoiseq2 extracts reference and variant sequences from FASTA and VCF files and encodes them for model input, e.g. as one-hot arrays.
 
 kipoiseq2 is the successor of [kipoiseq](https://github.com/kipoi/kipoiseq) without the Kipoi model zoo dataloaders (`kipoiseq.dataloaders`) and without the kipoi dependencies.
-Its extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
+Its sequence and VCF extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
 
 ## Installation
 
@@ -18,7 +18,6 @@ pip install kipoiseq2
 
 Optional dependencies:
 - `cyvcf2` for the VCF-based extractors (`MultiSampleVCF` and everything that reads a VCF file)
-- `pybedtools` for `Interval.from_pybedtools` and `Interval.to_pybedtools`
 
 ## Getting started
 
@@ -41,7 +40,6 @@ alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10
 ```
 
 More examples:
-- The extractors notebook [notebooks/getting-started-with-VariantExtractors.ipynb](notebooks/getting-started-with-VariantExtractors.ipynb).
 - The tests in [tests/](tests/) show the usage of every extractor and transform.
 - API docs: the docstrings in [kipoiseq2/extractors](kipoiseq2/extractors) and [kipoiseq2/transforms](kipoiseq2/transforms) (functional and class-based).
 
@@ -50,6 +48,11 @@ More examples:
 Replace `kipoiseq` with `kipoiseq2` in imports and dependencies.
 The Kipoi dataloaders (`SeqIntervalDl`, `StringSeqIntervalDl`, `AnchoredGTFDl`, `MMSpliceDl` and the protein and UTR dataloaders) have no replacement in kipoiseq2; keep using `kipoiseq` for them.
 kipoiseq2 does not install `kipoi`, `kipoi-utils`, `kipoi-conda` or `gffutils`, so declare them yourself if you import them.
+
+kipoiseq2 also drops these parts of kipoiseq:
+- the GTF, protein and UTR extractors (`kipoiseq.extractors.gtf`, `protein` and `multi_interval`) and `VariantCombinator`
+- `Interval.from_pybedtools` and `Interval.to_pybedtools`
+- the `progress` argument of `MultiSampleVCF.query_variants`, `MultiSampleVCF.query_all` and `VariantIntervalQueryable`
 
 ## Contributing
 

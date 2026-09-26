@@ -13,12 +13,10 @@ Tests to perform:
 # Interval
 - validation of the interval
 - access to all the attributes
-- from_pybedtools and to_pybedtools
 - shift, swapt_strand, trim, etc
 """
 
 import cyvcf2
-import pybedtools
 import pytest
 
 from kipoiseq2.dataclasses import Interval, Variant
@@ -125,9 +123,6 @@ def test_interval():
     interval.score = 10
 
     assert interval.unstrand().strand == "."
-
-    assert interval == Interval.from_pybedtools(interval.to_pybedtools())
-    assert isinstance(interval.to_pybedtools(), pybedtools.Interval)
 
     i2 = interval.shift(10, use_strand=False)
 

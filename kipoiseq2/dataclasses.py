@@ -1,18 +1,8 @@
-"""Data classes for major objects:
-- Interval
-- Variant
-"""
+"""Data classes for the major objects: Interval and Variant."""
 
-# from collections import Mapping, OrderedDict
-# from kipoi_utils.data_utils import numpy_collate, numpy_collate_concat
 import math
 from copy import deepcopy
 from typing import Optional
-
-# import numpy as np
-# -------------------------------------------
-# basepair implementation
-# import attr
 
 
 class Variant:
@@ -216,30 +206,6 @@ class Interval:
     @property
     def strand(self):
         return self._strand
-
-    @classmethod
-    def from_pybedtools(cls, interval):
-        """Create the ranges object from `pybedtools.Interval`
-
-        # Arguments
-            interval: `pybedtools.Interval` instance
-        """
-        return cls(
-            chrom=interval.chrom,
-            start=interval.start,
-            end=interval.stop,
-            name=interval.name,
-            score=interval.score,
-            strand=interval.strand,
-            attrs=dict(interval.attrs or dict()),
-        )
-
-    def to_pybedtools(self):
-        import pybedtools
-
-        return pybedtools.create_interval_from_list(
-            [self.chrom, self.start, self.end, self.name, self.score, self.strand]
-        )
 
     @property
     def neg_strand(self):

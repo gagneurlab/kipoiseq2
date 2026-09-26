@@ -1,11 +1,10 @@
 import abc
 import math
+import warnings
 from typing import Optional
 
-from deprecation import deprecated
 from pyfaidx import Sequence, complement
 
-from kipoiseq2 import __version__
 from kipoiseq2.dataclasses import Interval
 from kipoiseq2.extractors import (
     BaseExtractor,
@@ -80,13 +79,9 @@ class VariantSeqExtractor(BaseExtractor):
             self._ref_seq_extractor = reference_sequence
 
     @property
-    @deprecated(
-        deprecated_in="1.0",
-        # removed_in="2.0",
-        current_version=__version__,
-        details="Use `ref_seq_extractor` instead",
-    )
     def fasta(self):
+        """Deprecated alias of `ref_seq_extractor`."""
+        warnings.warn("`fasta` is deprecated, use `ref_seq_extractor` instead", DeprecationWarning, stacklevel=2)
         return self._ref_seq_extractor
 
     @property
@@ -111,7 +106,7 @@ class VariantSeqExtractor(BaseExtractor):
     ):
         """
         Args:
-            interval: pybedtools.Interval Region of interest from
+            interval: Interval, the region of interest from
                 which to query the sequence. 0-based
             variants: List[cyvcf2.Variant]: variants overlapping the `interval`.
                 can also be indels. 1-based

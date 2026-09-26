@@ -231,7 +231,7 @@ def resize_interval(interval, width, anchor="center"):
     """Resize the Interval. Returns new Interval instance with correct length.
 
     Arguments:
-        interval: pybedtools.Interval object or an object containing `start` and `end` attributes
+        interval: an object with writable `start` and `end` attributes
         width: desired width of the output interval
         anchor (str): which part of the sequence should be anchored. Choices: 'start', 'center', or 'end'
     """
