@@ -1,7 +1,6 @@
 import pytest
 from conftest import sample_5kb_fasta_file, vcf_file
 from cyvcf2 import VCF
-from pyfaidx import Sequence
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors import FastaStringExtractor
@@ -9,7 +8,9 @@ from kipoiseq2.extractors.vcf_seq import (
     IntervalSeqBuilder,
     SingleSeqVCFSeqExtractor,
     SingleVariantVCFSeqExtractor,
+    Subsequence,
     VariantSeqExtractor,
+    reverse_complement,
 )
 
 fasta_file = sample_5kb_fasta_file
@@ -23,14 +24,14 @@ def interval_seq_builder():
         [
             Interval("chr1", 10, 13),
             Interval("chr1", 13, 14),
-            Sequence(seq="TAGC", start=14, end=18),
+            Subsequence(seq="TAGC", start=14, end=18),
             Interval("chr1", 18, 20),
         ]
     )
 
 
 def test_interval_seq_builder_restore(interval_seq_builder):
-    sequence = Sequence(seq="CCCCATCGTT", start=10, end=20)
+    sequence = Subsequence(seq="CCCCATCGTT", start=10, end=20)
     interval_seq_builder.restore(sequence)
     assert interval_seq_builder[0].seq == "CCC"
     assert interval_seq_builder[1].seq == "C"
@@ -58,9 +59,26 @@ def test_interval_seq_builder_concat(interval_seq_builder):
     with pytest.raises(TypeError):
         interval_seq_builder.concat()
 
-    sequence = Sequence(seq="CCCCATCGNN", start=10, end=20)
+    sequence = Subsequence(seq="CCCCATCGNN", start=10, end=20)
     interval_seq_builder.restore(sequence)
     assert interval_seq_builder.concat() == "CCCCTAGCNN"
+
+
+def test_subsequence_slice_keeps_coordinates():
+    s = Subsequence(seq="ACGTA", start=10, end=15)
+    assert s[1:3] == Subsequence("CG", 11, 13)
+    assert s[:2] == Subsequence("AC", 10, 12)
+    assert s[3:] == Subsequence("TA", 13, 15)
+    # slices beyond the sequence are clamped, as for str
+    assert s[4:9] == Subsequence("A", 14, 15)
+    assert s[7:9] == Subsequence("", 15, 15)
+
+
+def test_reverse_complement():
+    assert reverse_complement("ACGTNacgtn") == "nacgtNACGT"
+    assert reverse_complement("RYKM") == "KMRY"
+    with pytest.raises(ValueError):
+        reverse_complement("AC-GT")
 
 
 @pytest.fixture
@@ -69,7 +87,7 @@ def variant_seq_extractor():
 
 
 def test__split_overlapping(variant_seq_extractor):
-    pair = (Sequence(seq="AAA", start=3, end=6), Sequence(seq="T", start=3, end=4))
+    pair = (Subsequence(seq="AAA", start=3, end=6), Subsequence(seq="T", start=3, end=4))
     splited_pairs = list(variant_seq_extractor._split_overlapping([pair], 5))
 
     assert splited_pairs[0][0].seq == "AA"
@@ -77,7 +95,7 @@ def test__split_overlapping(variant_seq_extractor):
     assert splited_pairs[1][0].seq == "A"
     assert splited_pairs[1][1].seq == ""
 
-    pair = (Sequence(seq="TT", start=3, end=5), Sequence(seq="AAA", start=3, end=6))
+    pair = (Subsequence(seq="TT", start=3, end=5), Subsequence(seq="AAA", start=3, end=6))
     splited_pairs = list(variant_seq_extractor._split_overlapping([pair], 4))
 
     assert splited_pairs[0][0].seq == "T"

@@ -1,9 +1,8 @@
 import abc
 import math
 import warnings
+from dataclasses import dataclass
 from typing import Optional
-
-from pyfaidx import Sequence, complement
 
 from kipoiseq2.dataclasses import Interval
 from kipoiseq2.extractors import (
@@ -14,17 +13,68 @@ from kipoiseq2.extractors import (
 
 __all__ = ["VariantSeqExtractor", "SingleVariantVCFSeqExtractor", "SingleSeqVCFSeqExtractor"]
 
+# IUPAC complement, the same table as pyfaidx.complement. Other characters
+# are deleted, so a length change reveals them.
+_COMPLEMENT_FROM = "ACTGNactgnYRWSKMDVHBXyrwskmdvhbx"
+_COMPLEMENT_TO = "TGACNtgacnRYWSMKHBDVXrywsmkhbdvx"
+_COMPLEMENT = str.maketrans(
+    _COMPLEMENT_FROM, _COMPLEMENT_TO, "".join(chr(c) for c in range(256) if chr(c) not in _COMPLEMENT_FROM)
+)
+
+
+def reverse_complement(seq: str) -> str:
+    """Reverse complement a DNA sequence with IUPAC codes.
+
+    Args:
+      seq: DNA sequence. Upper and lower case are kept.
+
+    Returns:
+      The reverse complement of `seq`.
+
+    Raises:
+      ValueError: if `seq` contains a character without IUPAC complement.
+    """
+    comp = seq.translate(_COMPLEMENT)
+    if len(comp) != len(seq):
+        invalid = sorted(set(seq) - set(_COMPLEMENT_FROM))
+        raise ValueError("Sequence contains non-DNA characters: {}".format(invalid))
+    return comp[::-1]
+
+
+@dataclass(frozen=True)
+class Subsequence:
+    """A sequence together with its 0-based, half-open coordinates [start, end).
+
+    Slicing keeps the coordinates in sync with the sequence, so a slice of a
+    REF allele still knows where it starts and ends on the chromosome.
+    """
+
+    seq: str
+    start: int
+    end: int
+
+    def __len__(self) -> int:
+        return len(self.seq)
+
+    def __getitem__(self, key: slice) -> "Subsequence":
+        i, j, step = key.indices(len(self.seq))
+        if step != 1:
+            raise ValueError("Subsequence supports only slices with step 1")
+        j = max(i, j)
+        return Subsequence(self.seq[i:j], self.start + i, self.start + j)
+
 
 class IntervalSeqBuilder(list):
     """
-    String builder for `pyfaidx.Sequence` and `Interval` objects.
+    String builder for `Subsequence` and `Interval` objects.
     """
 
-    def restore(self, sequence: Sequence):
-        """
+    def restore(self, sequence: Subsequence):
+        """Replace every Interval in the builder by its part of `sequence`.
+
         Args:
-          sequence: `pyfaidx.Sequence` which convert all interval inside
-            to `Seqeunce` objects.
+          sequence: the reference sequence that covers all intervals
+            in the builder.
         """
         for i, interval in enumerate(self):
             # interval.end can be bigger than interval.start
@@ -37,7 +87,7 @@ class IntervalSeqBuilder(list):
 
     def _concat(self):
         for sequence in self:
-            if type(sequence) is not Sequence:
+            if type(sequence) is not Subsequence:
                 raise TypeError("Intervals should be restored with `restore` method before calling concat method!")
             yield sequence.seq
 
@@ -181,20 +231,18 @@ class VariantSeqExtractor(BaseExtractor):
         if use_strand is None:
             use_strand = self.use_strand
         if use_strand and interval.strand == "-":
-            # reverse-complement
-            seq = complement(seq)[::-1]
+            seq = reverse_complement(seq)
 
         return seq
 
     @staticmethod
     def _variant_to_sequence(variants):
         """
-        Convert `cyvcf2.Variant` objects to `pyfaidx.Seqeunce` objects
-        for reference and variants.
+        Convert `Variant` objects to (REF, ALT) pairs of `Subsequence` objects.
         """
         for v in variants:
-            ref = Sequence(name=v.chrom, seq=v.ref, start=v.start, end=v.start + len(v.ref))
-            alt = Sequence(name=v.chrom, seq=v.alt, start=v.start, end=v.start + len(v.alt))
+            ref = Subsequence(seq=v.ref, start=v.start, end=v.start + len(v.ref))
+            alt = Subsequence(seq=v.alt, start=v.start, end=v.start + len(v.alt))
             yield ref, alt
 
     @staticmethod
@@ -263,7 +311,7 @@ class VariantSeqExtractor(BaseExtractor):
     def _fetch(self, interval, istart, iend):
         # fetch interval, ignore strand
         seq = self.ref_seq_extractor.extract(Interval(interval.chrom, istart, iend))
-        seq = Sequence(name=interval.chrom, seq=seq, start=istart, end=iend)
+        seq = Subsequence(seq=seq, start=istart, end=iend)
         return seq
 
     @staticmethod
