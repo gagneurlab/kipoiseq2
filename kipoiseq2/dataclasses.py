@@ -89,7 +89,10 @@ class Variant:
 
     @property
     def end(self):
-        """1-based variant end position"""
+        """0-based, exclusive variant end position: `start + len(ref)`.
+
+        This equals the 1-based position of the last REF base.
+        """
         return self.start + len(self.ref)
 
     @classmethod
@@ -153,13 +156,18 @@ class Variant:
 class Interval:
     """Container for genomic interval(s)
 
+    Coordinates are 0-based, half-open: the interval covers the bases
+    `start` to `end - 1`, and its width is `end - start`. This is the
+    BED convention. In 1-based VCF or GTF positions, the interval covers
+    `start + 1` to `end`.
+
     All fields can be either a single values (str or int) or a
     numpy array of values.
 
     # Arguments
         chrom: Chromosome
-        start: start position
-        end: end position
+        start: 0-based start position (inclusive)
+        end: 0-based end position (exclusive)
         name: interval name
         score: interval score
         strand: interval strand ("+", "-" or "." for unknown strand)
@@ -169,8 +177,8 @@ class Interval:
     def __init__(
         self,
         chrom: str,
-        start: int,  # 0-based
-        end: int,  # 0-based
+        start: int,  # 0-based, inclusive
+        end: int,  # 0-based, exclusive
         name: str = "",
         score: float = 0,
         strand: str = ".",
@@ -313,8 +321,13 @@ class Interval:
         return obj
 
     def is_valid(self, chrom_len=math.inf):
-        """Check if the interval is valid"""
-        return self.start >= 0 and self.end < chrom_len
+        """Check that the interval lies within [0, chrom_len).
+
+        Args:
+          chrom_len: length of the chromosome. An interval may end at
+            `chrom_len`, because the end is exclusive.
+        """
+        return self.start >= 0 and self.end <= chrom_len
 
     def truncate(self, chrom_len=math.inf):
         """Truncate the interval to become valid"""
@@ -323,7 +336,7 @@ class Interval:
         else:
             obj = self.copy()
             obj._start = max(self._start, 0)
-            obj._end = min(self.end, chrom_len - 1)
+            obj._end = min(self.end, chrom_len)
             return obj
 
     def resize(self, width, use_strand=True):

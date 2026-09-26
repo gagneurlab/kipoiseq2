@@ -157,8 +157,9 @@ class VariantSeqExtractor(BaseExtractor):
         else:
             istart, iend = interval.start, interval.end
 
+        # the fetch interval is half-open, so it may end at chrom_len
         istart = max(istart, 0)
-        iend = min(iend, chrom_len - 1)
+        iend = min(iend, chrom_len)
 
         # 4. Iterate from the anchor point outwards. At each
         # register the interval from which to take the reference sequence

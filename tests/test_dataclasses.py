@@ -148,6 +148,14 @@ def test_interval():
     assert i2.start == 0
     assert i2.end == 5
 
+    # the end is exclusive, so an interval may end at the chromosome end
+    assert interval.is_valid(chrom_len=20)
+    assert not interval.is_valid(chrom_len=19)
+    assert interval.truncate(chrom_len=20) == interval
+    i2 = interval.truncate(chrom_len=15)
+    assert i2.start == 10
+    assert i2.end == 15
+
     assert interval.center() == 15
 
     # resize

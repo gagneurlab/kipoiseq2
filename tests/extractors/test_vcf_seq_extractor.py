@@ -157,6 +157,35 @@ def test_extract(variant_seq_extractor):
     assert seq == "ACG"
 
 
+# sample.5kb.fa has one 5000 bp chromosome that repeats ACGTA
+CHROM_LEN = 5000
+
+
+@pytest.mark.parametrize("is_padding", [False, True])
+def test_extract_interval_at_chromosome_end(variant_seq_extractor, is_padding):
+    # the interval covers the last 10 bases, so no padding is needed
+    interval = Interval("chr1", CHROM_LEN - 10, CHROM_LEN)
+    seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN - 5, chrom_len=CHROM_LEN, is_padding=is_padding)
+    assert seq == "ACGTAACGTA"
+
+    # a deletion upstream of the anchor pulls in 2 bases after the chromosome end
+    deletion = Variant("chr1", CHROM_LEN - 7, "GTA", "G")
+    if is_padding:
+        seq = variant_seq_extractor.extract(
+            interval, [deletion], anchor=CHROM_LEN - 10, chrom_len=CHROM_LEN, is_padding=True
+        )
+        assert seq == "ACGACGTANN"
+    else:
+        with pytest.raises(ValueError):
+            variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10, chrom_len=CHROM_LEN)
+
+
+def test_extract_interval_beyond_chromosome_end(variant_seq_extractor):
+    interval = Interval("chr1", CHROM_LEN - 5, CHROM_LEN + 5)
+    seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN, chrom_len=CHROM_LEN, is_padding=True)
+    assert seq == "ACGTANNNNN"
+
+
 @pytest.fixture
 def single_variant_vcf_seq_extractor():
     return SingleVariantVCFSeqExtractor(fasta_file, vcf_file)
