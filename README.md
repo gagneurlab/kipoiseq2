@@ -1,71 +1,56 @@
-# kipoiseq
-<a href='https://circleci.com/gh/kipoi/kipoiseq'>
-	<img alt='CircleCI' src='https://circleci.com/gh/kipoi/kipoiseq.svg?style=svg' style="max-height:20px;width:auto">
-</a>
-<a href=https://coveralls.io/github/kipoi/kipoiseq?branch=master>
-	<img alt='Coverage status' src=https://coveralls.io/repos/github/kipoi/kipoiseq/badge.svg?branch=master style="max-height:20px;width:auto;">
-</a>
+# kipoiseq2
 
-Standard set of data-loaders for training and making predictions for DNA sequence-based models.
+[![CI](https://github.com/kipoi/kipoiseq2/actions/workflows/ci.yml/badge.svg)](https://github.com/kipoi/kipoiseq2/actions/workflows/ci.yml)
 
-All dataloaders in `kipoiseq.dataloaders` decorated with `@kipoi_dataloader` (SeqIntervalDl and StringSeqIntervalDl) are compatible Kipoi models and can be directly used when specifying a new model in `model.yaml`:
-```yaml
-...
-default_dataloader:
-  defined_as: kipoiseq.dataloaders.SeqIntervalDl
-  default_args:
-    auto_resize_len: 1000 # override default args in SeqIntervalDl
-    
-dependencies:
-  pip:
-    - kipoiseq
-...
-```
+Sequence extractors and transforms for DNA sequence-based models.
+kipoiseq2 extracts reference and variant sequences from FASTA, VCF and GTF files and encodes them for model input, e.g. as one-hot arrays.
+
+kipoiseq2 is the successor of [kipoiseq](https://github.com/kipoi/kipoiseq) without the Kipoi model zoo dataloaders (`kipoiseq.dataloaders`) and without the kipoi dependencies.
+Its extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
 
 ## Installation
 
+Requires Python >= 3.10.
+
 ```bash
-pip install kipoiseq
+pip install kipoiseq2
 ```
 
 Optional dependencies:
-```bash
-pip install cyvcf2, pyranges
-conda install cyvcf2, pyranges
-```
+- `cyvcf2` for the VCF-based extractors (`MultiSampleVCF` and everything that reads a VCF file)
+- `pybedtools` for `Interval.from_pybedtools` and `Interval.to_pybedtools`
 
 ## Getting started
 
 ```python
-from kipoiseq.dataloaders import SeqIntervalDl
+from kipoiseq2 import Interval, Variant
+from kipoiseq2.extractors import FastaStringExtractor, MultiSampleVCF, VariantSeqExtractor
+from kipoiseq2.transforms.functional import one_hot_dna
 
-dl = SeqIntervalDl.init_example()  # use the provided example files
-# your own files
-dl = SeqIntervalDl("intervals.bed", "genome.fa")
+interval = Interval("chr1", 10, 20, strand="+")
 
-len(dl)  # length of the dataset
+# reference sequence
+fasta = FastaStringExtractor("genome.fa", use_strand=True)
+seq = fasta.extract(interval)  # 10 bp string
+one_hot = one_hot_dna(seq)  # array of shape (10, 4)
 
-dl[0]  # get one instance. # returns a dictionary: 
-# dict(inputs=<one-hot-encoded-array>, 
-#      targets=<additional columns in the bed file>, 
-#      metadata=dict(ranges=GenomicRanges(chr=, start, end)...
-
-all = dl.load_all()  # load the whole dataset
-
-# load batches of data
-it = dl.batch_iter(32, num_workers=8)  # load batches of data in parallel using 8 workers
-# returns a dictionary with all three keys: inputs, targets, metadata
-
-it = dl.batch_train_iter(32, num_workers=8)
-# returns a tuple: (inputs, targets), can be used directly with keras' `model.fit_generator`
+# sequence with variants applied, anchored at the interval start
+variants = [Variant("chr1", 15, "A", "T")]
+# or all variants of a VCF file in the interval: MultiSampleVCF("variants.vcf.gz").fetch_variants(interval)
+alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10)
 ```
 
-More info:
-- Follow the getting-started [colab notebook](https://colab.research.google.com/github/kipoi/kipoiseq/blob/master/notebooks/getting-started.ipynb).
-- See [docs](https://kipoi.org/kipoiseq/)
+More examples:
+- The extractors notebook [notebooks/getting-started-with-VariantExtractors.ipynb](notebooks/getting-started-with-VariantExtractors.ipynb).
+- The tests in [tests/](tests/) show the usage of every extractor and transform.
+- API docs: the docstrings in [kipoiseq2/extractors](kipoiseq2/extractors) and [kipoiseq2/transforms](kipoiseq2/transforms) (functional and class-based).
 
-## How to write your own data-loaders
-- Read the pytorch [Data Loading and Processing Tutorial](https://pytorch.org/tutorials/beginner/data_loading_tutorial.html) to become more familiar with transforms and dataloaders
-- Read the code for `SeqIntervalDl` in [kipoiseq/dataloaders/sequence.py](https://github.com/kipoi/kipoiseq/blob/master/kipoiseq/dataloaders/sequence.py)
-  - you can skip the `@kipoi_dataloader` and the long yaml doc-string. These are only required if you want to use dataloaders in Kipoi's model.yaml files.
-- Explore the available transforms ([functional](http://kipoi.org/kipoiseq/transforms/functional/), [class-based](http://kipoi.org/kipoiseq/transforms/transforms/)) or extractors ([kipoiseq](https://github.com/kipoi/kipoiseq/blob/master/kipoiseq/extractors.py))
+## Migrating from kipoiseq
+
+Replace `kipoiseq` with `kipoiseq2` in imports and dependencies.
+The Kipoi dataloaders (`SeqIntervalDl`, `StringSeqIntervalDl`, `AnchoredGTFDl`, `MMSpliceDl` and the protein and UTR dataloaders) have no replacement in kipoiseq2; keep using `kipoiseq` for them.
+kipoiseq2 does not install `kipoi`, `kipoi-utils`, `kipoi-conda` or `gffutils`, so declare them yourself if you import them.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).

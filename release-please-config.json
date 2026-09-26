@@ -1,0 +1,13 @@
+{
+  "merge-type": "squash",
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "147eba74493bc0b11c9d920a4d4a8a746876c367",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "kipoiseq2",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true
+    }
+  }
+}

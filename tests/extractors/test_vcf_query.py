@@ -1,9 +1,10 @@
+import pandas as pd
 import pytest
 from conftest import vcf_file
-import pandas as pd
-from kipoiseq.dataclasses import Variant, Interval
-from kipoiseq.extractors.vcf_seq import MultiSampleVCF
-from kipoiseq.extractors.vcf_query import *
+
+from kipoiseq2.dataclasses import Interval, Variant
+from kipoiseq2.extractors.vcf_query import *
+from kipoiseq2.extractors.vcf_seq import MultiSampleVCF
 
 
 @pytest.fixture
@@ -34,66 +35,62 @@ def query_interval_false():
     return VariantIntervalQuery(lambda vs, i: [True, False, True, False])
 
 
-def test_VariantIntervalQuery__and__(query_interval_false,
-                                     query_interval_true):
-    assert (query_interval_false & query_interval_true)(None, None) == [
-        True, False, False, False]
+def test_VariantIntervalQuery__and__(query_interval_false, query_interval_true):
+    assert (query_interval_false & query_interval_true)(None, None) == [True, False, False, False]
 
 
-def test_VariantIntervalQuery__or__(query_interval_false,
-                                    query_interval_true):
-    assert (query_interval_false | query_interval_true)(None, None) == [
-        True, True, True, False]
+def test_VariantIntervalQuery__or__(query_interval_false, query_interval_true):
+    assert (query_interval_false | query_interval_true)(None, None) == [True, True, True, False]
 
 
 @pytest.fixture
 def variant_queryable():
     vcf = MultiSampleVCF(vcf_file)
-    return VariantIntervalQueryable(vcf, [
-        (
-            [
-                Variant('chr1', 12, 'A', 'T'),
-                Variant('chr1', 18, 'A', 'C', filter='q10'),
-            ],
-            Interval('chr1', 10, 20)
-        ),
-        (
-            [
-                Variant('chr2', 120, 'AT', 'AAAT'),
-            ],
-            Interval('chr2', 110, 200)
-        )
-    ])
+    return VariantIntervalQueryable(
+        vcf,
+        [
+            (
+                [
+                    Variant("chr1", 12, "A", "T"),
+                    Variant("chr1", 18, "A", "C", filter="q10"),
+                ],
+                Interval("chr1", 10, 20),
+            ),
+            (
+                [
+                    Variant("chr2", 120, "AT", "AAAT"),
+                ],
+                Interval("chr2", 110, 200),
+            ),
+        ],
+    )
 
 
 def test_variant_queryable__iter__(variant_queryable):
     variants = list(variant_queryable)
     assert len(variants) == 3
-    assert variants[0].ref == 'A'
-    assert variants[0].alt == 'T'
+    assert variants[0].ref == "A"
+    assert variants[0].alt == "T"
 
 
 def test_variant_queryable_filter_1(variant_queryable):
-    assert len(list(variant_queryable.filter(lambda v: v.alt == 'T'))) == 1
+    assert len(list(variant_queryable.filter(lambda v: v.alt == "T"))) == 1
 
 
 def test_variant_queryable_filter_2(variant_queryable):
-    assert len(list(variant_queryable.filter(lambda v: v.ref == 'A'))) == 2
+    assert len(list(variant_queryable.filter(lambda v: v.ref == "A"))) == 2
 
 
 def test_variant_filter_range(variant_queryable):
-    assert 2 == len(list(variant_queryable.filter_range(
-        lambda variants, interval: (v.ref == 'A' for v in variants))))
+    assert 2 == len(list(variant_queryable.filter_range(lambda variants, interval: (v.ref == "A" for v in variants))))
 
 
 def test_VariantQueryable_filter_by_num_max(variant_queryable):
-    assert 1 == len(list(variant_queryable.filter_range(
-        NumberVariantQuery(max_num=1))))
+    assert 1 == len(list(variant_queryable.filter_range(NumberVariantQuery(max_num=1))))
 
 
 def test_VariantQueryable_filter_by_num_min(variant_queryable):
-    assert 2 == len(list(variant_queryable.filter_range(
-        NumberVariantQuery(min_num=2))))
+    assert 2 == len(list(variant_queryable.filter_range(NumberVariantQuery(min_num=2))))
 
 
 def test_VariantQueryable_filter_variant_query_2(variant_queryable):
@@ -101,8 +98,7 @@ def test_VariantQueryable_filter_variant_query_2(variant_queryable):
 
 
 def test_VariantQueryable_filter_variant_query_3(variant_queryable):
-    assert 3 == len(list(variant_queryable.filter(
-        FilterVariantQuery() | FilterVariantQuery(filter='q10'))))
+    assert 3 == len(list(variant_queryable.filter(FilterVariantQuery() | FilterVariantQuery(filter="q10"))))
 
 
 def test_VariantQueryable_batch_iter():
@@ -126,12 +122,12 @@ def test_VariantQueryable_batch_iter():
     assert len(batches) == 1
 
     variants, interval = batches[0].variant_intervals[0]
-    assert interval == Interval('chr1', 3, 25)
+    assert interval == Interval("chr1", 3, 25)
     assert len(variants) == 3
 
 
 def test_VariantQueryable_to_vcf(tmp_path):
-    path = str(tmp_path / 'a.vcf')
+    path = str(tmp_path / "a.vcf")
     vcf = MultiSampleVCF(vcf_file)
     variant_queryable = vcf.query_all()
     variant_queryable.to_vcf(path, remove_samples=True, clean_info=True)
@@ -145,15 +141,13 @@ def test_VariantQueryable_to_sample_csv(tmp_path):
 
     variant_queryable = vcf.query_all()
 
-    path = str(tmp_path / 'sample.csv')
+    path = str(tmp_path / "sample.csv")
     variant_queryable.to_sample_csv(path)
 
     df = pd.read_csv(path)
-    df_expected = pd.DataFrame({
-        'variant': ['chr1:4:T>C', 'chr1:25:AACG>GA'],
-        'sample': ['NA00003', 'NA00002'],
-        'genotype': [3, 3]
-    })
+    df_expected = pd.DataFrame(
+        {"variant": ["chr1:4:T>C", "chr1:25:AACG>GA"], "sample": ["NA00003", "NA00002"], "genotype": [3, 3]}
+    )
     pd.testing.assert_frame_equal(df, df_expected)
 
 
@@ -162,15 +156,17 @@ def test_VariantQueryable_to_sample_csv_fields(tmp_path):
 
     variant_queryable = vcf.query_all()
 
-    path = str(tmp_path / 'sample.csv')
-    variant_queryable.to_sample_csv(path, ['GT', 'HQ'])
+    path = str(tmp_path / "sample.csv")
+    variant_queryable.to_sample_csv(path, ["GT", "HQ"])
 
     df = pd.read_csv(path)
-    df_expected = pd.DataFrame({
-        'variant': ['chr1:4:T>C', 'chr1:25:AACG>GA'],
-        'sample': ['NA00003', 'NA00002'],
-        'genotype': [3, 3],
-        'GT': ['1/1', '1/1'],
-        'HQ': ['51,51', '10,10']
-    })
+    df_expected = pd.DataFrame(
+        {
+            "variant": ["chr1:4:T>C", "chr1:25:AACG>GA"],
+            "sample": ["NA00003", "NA00002"],
+            "genotype": [3, 3],
+            "GT": ["1/1", "1/1"],
+            "HQ": ["51,51", "10,10"],
+        }
+    )
     pd.testing.assert_frame_equal(df, df_expected)

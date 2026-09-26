@@ -1,20 +1,21 @@
-from tqdm import tqdm_notebook as tqdm
-from kipoiseq.extractors.protein import SingleVariantProteinVCFSeqExtractor, TranscriptSeqExtractor, SingleSeqProteinVCFSeqExtractor
-from kipoiseq.transforms.functional import translate
-from pyfaidx import Fasta
-from conftest import gtf_file_GRCh38, fasta_file_GRCh38, vcf_file_for_testing_synonymous_mutations, protein_file_GRCh38
-import pytest
 import os
 
+import pytest
+from conftest import fasta_file_GRCh38, gtf_file_GRCh38, protein_file_GRCh38, vcf_file_for_testing_synonymous_mutations
+from pyfaidx import Fasta
+from tqdm import tqdm_notebook as tqdm
 
-pytestmark_gtf = pytest.mark.skipif(not os.path.isfile(gtf_file_GRCh38),
-                                    reason="File does not exist")
-pytestmark_fasta = pytest.mark.skipif(not os.path.isfile(fasta_file_GRCh38),
-                                      reason="File does not exist")
-pytestmark_vcf = pytest.mark.skipif(not os.path.isfile(vcf_file_for_testing_synonymous_mutations),
-                                    reason="File does not exist")
-pytestmark_protein = pytest.mark.skipif(not os.path.isfile(protein_file_GRCh38),
-                                        reason="File does not exist")
+from kipoiseq2.extractors.protein import (
+    TranscriptSeqExtractor,
+)
+from kipoiseq2.transforms.functional import translate
+
+pytestmark_gtf = pytest.mark.skipif(not os.path.isfile(gtf_file_GRCh38), reason="File does not exist")
+pytestmark_fasta = pytest.mark.skipif(not os.path.isfile(fasta_file_GRCh38), reason="File does not exist")
+pytestmark_vcf = pytest.mark.skipif(
+    not os.path.isfile(vcf_file_for_testing_synonymous_mutations), reason="File does not exist"
+)
+pytestmark_protein = pytest.mark.skipif(not os.path.isfile(protein_file_GRCh38), reason="File does not exist")
 
 
 @pytestmark_gtf
@@ -28,13 +29,14 @@ def tse():
 
 def read_pep_fa(protein_file):
     import pandas as pd
+
     proteins = Fasta(str(protein_file))
     pl = []
     for v in proteins:
         names = v.long_name.split(" ", 8)
-        d = {"protein_id": names[0], 'protein_type': names[1]}
+        d = {"protein_id": names[0], "protein_type": names[1]}
         d = {**d, **dict([n.split(":", 1) for n in names[2:]])}
-        d['seq'] = str(proteins[v.name])
+        d["seq"] = str(proteins[v.name])
         pl.append(d)
     return pd.DataFrame(pl)
 
@@ -45,12 +47,12 @@ def read_pep_fa(protein_file):
 @pytestmark_protein
 @pytest.mark.xfail
 def test_hg38(tse):
-    with open('err_transcripts', 'w+') as f:
-        dfp = read_pep_fa(protein_file)
-        dfp['transcript_id'] = dfp.transcript.str.split(".", n=1, expand=True)[0]
-        #assert not dfp['transcript_id'].duplicated().any()
+    with open("err_transcripts", "w+") as f:
+        dfp = read_pep_fa(protein_file_GRCh38)
+        dfp["transcript_id"] = dfp.transcript.str.split(".", n=1, expand=True)[0]
+        # assert not dfp['transcript_id'].duplicated().any()
         dfp = dfp.set_index("transcript_id")
-        #dfp = dfp[~dfp.chromosome.isnull()]
+        # dfp = dfp[~dfp.chromosome.isnull()]
         assert len(tse) > 100
         assert tse.transcripts.isin(dfp.index).all()
         div3_error = 0
@@ -60,14 +62,14 @@ def test_hg38(tse):
             # make sure all ids can be found in the proteome
             dna_seq = tse.get_seq(transcript_id)
             if dna_seq == "NNN":
-                f.write(transcript_id+' has an ambiguous start and end.Skip!')
+                f.write(transcript_id + " has an ambiguous start and end.Skip!")
                 continue
             # dna_seq = dna_seq[:(len(dna_seq) // 3) * 3]
             # if len(dna_seq) % 3 != 0:
-             #   div3_error += 1
-              #  print("len(dna_seq) % 3 != 0: {}".format(transcript_id))
-               # err_transcripts.append({"transcript_id": transcript_id, "div3_err": True})
-                # continue
+            #   div3_error += 1
+            #  print("len(dna_seq) % 3 != 0: {}".format(transcript_id))
+            # err_transcripts.append({"transcript_id": transcript_id, "div3_err": True})
+            # continue
             if len(dna_seq) % 3 != 0:
                 f.write(transcript_id)
                 continue
@@ -82,4 +84,3 @@ def test_hg38(tse):
                     if a != b:
                         n_mismatch += 1
                         f.write("{} {} {}/{}".format(a, b, i, len(prot_seq)))
-            

@@ -6,10 +6,10 @@ theme:
  custom_dir: theme_dir
 extra_css: [css/extra.css]
 # --------------------------
-repo_url: http://github.com/kipoi/kipoiseq
-site_url: http://kipoi.org/docs/kipoiseq/
+repo_url: http://github.com/kipoi/kipoiseq2
+site_url: http://kipoi.org/docs/kipoiseq2/
 edit_uri: edit/master/docs/templates/
-site_description: 'Documentation of kipoiseq, variant effect prediction plugin for Kipoi.'
+site_description: 'Documentation of kipoiseq2, sequence extractors and transforms for DNA sequence-based models.'
 
 dev_addr: '0.0.0.0:8000'
 
@@ -22,18 +22,15 @@ google_analytics: ["UA-115025493-1", "kipoi.org"]
 # documented. Higher indentation leads to smaller header size.
 generate:
   - extractors.md:
-    - kipoiseq.extractors.base+
-    - kipoiseq.extractors.vcf+
-    - kipoiseq.extractors.vcf_query+
-    - kipoiseq.extractors.vcf_seq+
-    - kipoiseq.extractors.vcf_matching+
+    - kipoiseq2.extractors.base+
+    - kipoiseq2.extractors.vcf+
+    - kipoiseq2.extractors.vcf_query+
+    - kipoiseq2.extractors.vcf_seq+
+    - kipoiseq2.extractors.vcf_matching+
   - transforms/functional.md:
-    - kipoiseq.transforms.functional+
+    - kipoiseq2.transforms.functional+
   - transforms/transforms.md:
-    - kipoiseq.transforms.transforms+
-  - dataloaders.md:
-    - kipoiseq.dataloaders.sequence+
-    - kipoiseq.dataloaders.splicing.MMSpliceDl
+    - kipoiseq2.transforms.transforms+
 
 # - baz/cool-stuff.md:
 #   - foobar.baz:
@@ -52,7 +49,6 @@ generate:
 
 pages:
 - Home: index.md << ../README.md
-- Dataloaders: dataloaders.md
 - Transforms:
   - Functional: transforms/functional.md
   - Class-based: transforms/transforms.md

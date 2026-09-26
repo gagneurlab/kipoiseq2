@@ -1,7 +1,7 @@
-from kipoiseq.extractors import FastaStringExtractor
 import pytest
-from kipoiseq.dataclasses import Interval
 
+from kipoiseq2.dataclasses import Interval
+from kipoiseq2.extractors import FastaStringExtractor
 
 comp = {"A": "T", "C": "G", "G": "C", "T": "A"}
 comp.update({k.lower(): v.lower() for k, v in comp.items()})
@@ -20,7 +20,7 @@ def test_fastareader(use_strand, force_upper):
 
     for interval in intervals:
         seq = fr.extract(interval)
-        ref_seq = fasta_str[interval.start:interval.end]
+        ref_seq = fasta_str[interval.start : interval.end]
         if use_strand and interval.strand == "-":
             ref_seq = list(ref_seq)[::-1]
             ref_seq = "".join([comp[el] for el in ref_seq])
