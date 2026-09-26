@@ -81,6 +81,11 @@ def test_variant_queryable_filter_2(variant_queryable):
     assert len(list(variant_queryable.filter(lambda v: v.ref == "A"))) == 2
 
 
+def test_variant_queryable_filter_keeps_intervals(variant_queryable):
+    intervals = list(variant_queryable.iter_intervals())
+    assert list(variant_queryable.filter(lambda v: v.ref == "A").iter_intervals()) == intervals
+
+
 def test_variant_filter_range(variant_queryable):
     assert 2 == len(list(variant_queryable.filter_range(lambda variants, interval: (v.ref == "A" for v in variants))))
 

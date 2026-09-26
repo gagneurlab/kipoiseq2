@@ -132,10 +132,7 @@ class VariantIntervalQueryable:
           query: function which get a variant as input and filtered iter of
             variants.
         """
-        self.variant_intervals = [
-            (filter(query, variants), Interval)  # type: ignore[misc]
-            for variants, interval in self.variant_intervals
-        ]
+        self.variant_intervals = [(filter(query, variants), interval) for variants, interval in self.variant_intervals]
         return self
 
     def filter_range(self, query: VariantIntervalQuery):
