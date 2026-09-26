@@ -70,7 +70,7 @@ The pairs come in VCF order, and per variant in the order of the intervals.
 
 More examples:
 - The tests in [tests/](tests/) show the usage of every extractor and transform.
-- API docs: the docstrings in [kipoiseq2/extractors](kipoiseq2/extractors) and [kipoiseq2/transforms](kipoiseq2/transforms) (functional and class-based).
+- API docs: the docstrings in [src/kipoiseq2/extractors](src/kipoiseq2/extractors) and [src/kipoiseq2/transforms](src/kipoiseq2/transforms) (functional and class-based).
 
 ## Migrating from kipoiseq
 

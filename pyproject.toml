@@ -56,12 +56,11 @@ lint = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["kipoiseq2"]
+packages = ["src/kipoiseq2"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
@@ -103,7 +102,7 @@ commands = [["ruff", "check", "."]]
 runner = "uv-venv-lock-runner"
 dependency_groups = ["lint"]
 extras = ["vcf", "ranges"]
-commands = [["mypy", "kipoiseq2"]]
+commands = [["mypy", "src/kipoiseq2"]]
 
 [tool.mypy]
 python_version = "3.12"

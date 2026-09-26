@@ -70,4 +70,4 @@ preprocessor: pydocmd.preprocessor.DataLoaderYamlPreprocessor
 # subdirectory of your project (eg. docs/), you may want to add the parent
 # directory here.
 additional_search_paths:
-- ..
+- ../src

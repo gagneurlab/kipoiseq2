@@ -24,7 +24,7 @@ Look through the GitHub issues for features. Anything tagged with "enhancement" 
 
 ### Write documentation
 
-kipoiseq2 could always use more documentation, whether as docstrings, in the notebooks, or even on the web in blog posts, articles, and such.
+kipoiseq2 could always use more documentation, whether as docstrings, in the README, or even on the web in blog posts, articles, and such.
 
 ### Submit feedback
 
@@ -81,7 +81,7 @@ Available environments (defined in `pyproject.toml`):
 |-----------------|------------------------------------------|
 | `format-check`  | `ruff format --check .`                  |
 | `lints`         | `ruff check .`                           |
-| `typecheck`     | `mypy kipoiseq2`                          |
+| `typecheck`     | `mypy src/kipoiseq2`                     |
 | `py3.12`        | Run pytest under Python 3.12             |
 | `py3.13`        | Run pytest under Python 3.13             |
 | `py3.14`        | Run pytest under Python 3.14             |
@@ -123,7 +123,7 @@ Before you submit a pull request, check that it meets these guidelines:
 
 Versioning and tagging are automated by [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release-please.yml`). Publishing is handled by `.github/workflows/publish.yml`:
 
-- release-please watches commits on `master` and opens/maintains a release PR that bumps `pyproject.toml` and `kipoiseq2/__init__.py` and updates `CHANGELOG.md`.
+- release-please watches commits on `master` and opens/maintains a release PR that bumps `pyproject.toml` and `src/kipoiseq2/__init__.py` and updates `CHANGELOG.md`.
 - Merging the release PR cuts a `vX.Y.Z` tag and a GitHub release.
 - The release then triggers `publish.yml`, which builds sdist + wheel and uploads to PyPI via trusted publishing (OIDC).
 
