@@ -1,4 +1,5 @@
-import pandas as pd
+import csv
+
 import pytest
 from conftest import vcf_file
 
@@ -149,11 +150,12 @@ def test_VariantQueryable_to_sample_csv(tmp_path):
     path = str(tmp_path / "sample.csv")
     variant_queryable.to_sample_csv(path)
 
-    df = pd.read_csv(path)
-    df_expected = pd.DataFrame(
-        {"variant": ["chr1:4:T>C", "chr1:25:AACG>GA"], "sample": ["NA00003", "NA00002"], "genotype": [3, 3]}
-    )
-    pd.testing.assert_frame_equal(df, df_expected)
+    with open(path) as f:
+        rows = list(csv.DictReader(f))
+    assert rows == [
+        {"variant": "chr1:4:T>C", "sample": "NA00003", "genotype": "3"},
+        {"variant": "chr1:25:AACG>GA", "sample": "NA00002", "genotype": "3"},
+    ]
 
 
 def test_VariantQueryable_to_sample_csv_fields(tmp_path):
@@ -164,14 +166,9 @@ def test_VariantQueryable_to_sample_csv_fields(tmp_path):
     path = str(tmp_path / "sample.csv")
     variant_queryable.to_sample_csv(path, ["GT", "HQ"])
 
-    df = pd.read_csv(path)
-    df_expected = pd.DataFrame(
-        {
-            "variant": ["chr1:4:T>C", "chr1:25:AACG>GA"],
-            "sample": ["NA00003", "NA00002"],
-            "genotype": [3, 3],
-            "GT": ["1/1", "1/1"],
-            "HQ": ["51,51", "10,10"],
-        }
-    )
-    pd.testing.assert_frame_equal(df, df_expected)
+    with open(path) as f:
+        rows = list(csv.DictReader(f))
+    assert rows == [
+        {"variant": "chr1:4:T>C", "sample": "NA00003", "genotype": "3", "GT": "1/1", "HQ": "51,51"},
+        {"variant": "chr1:25:AACG>GA", "sample": "NA00002", "genotype": "3", "GT": "1/1", "HQ": "10,10"},
+    ]

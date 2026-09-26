@@ -11,7 +11,7 @@ authors = [
 ]
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = [
     "model zoo",
     "deep learning",
@@ -21,9 +21,18 @@ keywords = [
 ]
 dependencies = [
     "numpy",
-    "pandas",
     "pyfaidx",
-    "pyranges",
+]
+
+[project.optional-dependencies]
+# MultiSampleVCF and the VCF-based extractors
+vcf = [
+    "cyvcf2>=0.11.0",
+]
+# SingleVariantMatcher and MultiVariantsMatcher
+ranges = [
+    "polars>=1",
+    "polars-bio>=0.31",
 ]
 
 [project.urls]
@@ -40,19 +49,17 @@ test = [
     "pytest-mock",
     "pytest-cov",
     "pytest-sugar",
-    "cyvcf2>=0.11.0",
 ]
 lint = [
     "ruff",
     "mypy",
-    "pandas-stubs",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["kipoiseq2"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 120
 extend-exclude = ["notebooks"]
 
@@ -60,7 +67,6 @@ extend-exclude = ["notebooks"]
 select = ["E", "F", "W", "I"]
 ignore = [
     "E501",  # line-too-long
-    "E712",  # comparison-to-true (pandas idiom: df[col == True])
     "F403",  # star imports used intentionally in package
     "F405",  # may-be-undefined-from-star-import
 ]
@@ -71,13 +77,14 @@ ignore = [
 
 [tool.tox]
 requires = ["tox>=4", "tox-uv"]
-env_list = ["format-check", "lints", "typecheck", "py3.10", "py3.11", "py3.12", "py3.13", "py3.14"]
+env_list = ["format-check", "lints", "typecheck", "py3.12", "py3.13", "py3.14"]
 isolated_build = true
 
 [tool.tox.env_run_base]
 runner = "uv-venv-lock-runner"
 description = "run unit tests"
 dependency_groups = ["test"]
+extras = ["vcf", "ranges"]
 commands = [["pytest", { replace = "posargs", default = ["tests"], extend = true }]]
 
 [tool.tox.env."format-check"]
@@ -95,9 +102,11 @@ commands = [["ruff", "check", "."]]
 [tool.tox.env."typecheck"]
 runner = "uv-venv-lock-runner"
 dependency_groups = ["lint"]
+extras = ["vcf", "ranges"]
 commands = [["mypy", "kipoiseq2"]]
 
 [tool.mypy]
+python_version = "3.12"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -10,14 +10,16 @@ Its sequence and VCF extractors, transforms, `Interval` and `Variant` are those 
 
 ## Installation
 
-Requires Python >= 3.10.
+Requires Python >= 3.12.
 
 ```bash
-pip install kipoiseq2
+pip install kipoiseq2               # FASTA extractors and transforms (numpy, pyfaidx)
+pip install 'kipoiseq2[vcf]'        # + MultiSampleVCF and the VCF-based extractors (cyvcf2)
+pip install 'kipoiseq2[ranges]'     # + SingleVariantMatcher and MultiVariantsMatcher (polars, polars-bio)
+pip install 'kipoiseq2[vcf,ranges]' # everything
 ```
 
-Optional dependencies:
-- `cyvcf2` for the VCF-based extractors (`MultiSampleVCF` and everything that reads a VCF file)
+kipoiseq2 does not depend on pandas or pyranges.
 
 ## Getting started
 
@@ -39,6 +41,33 @@ variants = [Variant("chr1", 15, "A", "T")]
 alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10)
 ```
 
+`Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
+`Variant.start` is `pos - 1` and `Variant.end` is `start + len(ref)`.
+
+### Matching variants with intervals
+
+`SingleVariantMatcher` finds every interval-variant pair with one [polars-bio](https://biodatageeks.org/polars-bio/) overlap join.
+A variant matches an interval if `variant.start < interval.end` and `interval.start < variant.end`.
+
+```python
+import polars as pl
+from kipoiseq2.extractors import SingleVariantMatcher
+
+# chrom, start, end (0-based, half-open), optional strand, and any attribute columns
+exons = pl.DataFrame({"chrom": ["chr1"], "start": [100], "end": [200], "strand": ["+"], "exon_id": ["e1"]})
+matcher = SingleVariantMatcher("variants.vcf.gz", regions=exons, interval_attrs=["exon_id"])
+
+# all pairs as one polars DataFrame: interval columns, interval_idx, variant_* columns, variant_idx
+pairs = matcher.pairs()
+
+# or iterate (Interval, Variant) pairs; interval.attrs holds exon_id, variant.source the cyvcf2 record
+for interval, variant in SingleVariantMatcher("variants.vcf.gz", regions=exons, interval_attrs=["exon_id"]):
+    ...
+```
+
+Iteration runs one overlap join per batch of `variant_batch_size` variants (default 10000), so the Variant objects of a large VCF are not all held in memory.
+The pairs come in VCF order, and per variant in the order of the intervals.
+
 More examples:
 - The tests in [tests/](tests/) show the usage of every extractor and transform.
 - API docs: the docstrings in [kipoiseq2/extractors](kipoiseq2/extractors) and [kipoiseq2/transforms](kipoiseq2/transforms) (functional and class-based).
@@ -53,6 +82,16 @@ kipoiseq2 also drops these parts of kipoiseq:
 - the GTF, protein and UTR extractors (`kipoiseq.extractors.gtf`, `protein` and `multi_interval`) and `VariantCombinator`
 - `Interval.from_pybedtools` and `Interval.to_pybedtools`
 - the `progress` argument of `MultiSampleVCF.query_variants`, `MultiSampleVCF.query_all` and `VariantIntervalQueryable`
+
+The matchers use polars instead of pyranges:
+- `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `regions`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`.
+  For a PyRanges object `pr`, pass `regions=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
+- `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `regions`.
+- Arguments after `variant_fetcher` are keyword-only.
+- `SingleVariantMatcher` yields the pairs in VCF order instead of grouped by chromosome and strand.
+  With `intervals=`, it yields the given Interval objects, so they keep their name and attrs.
+- `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by `pairs()` and `iter_batches()`, which return polars DataFrames.
+- `variants_to_pyranges`, `intervals_to_pyranges` and `pyranges_to_intervals` are replaced by `variants_to_polars` and `intervals_to_polars`; `PyrangesVariantFetcher` is now `VariantListFetcher`.
 
 ## Contributing
 

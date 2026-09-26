@@ -1,97 +1,156 @@
-from typing import Iterable, Iterator, List, Optional, Tuple, Union
+"""Match variants with the intervals they overlap.
 
-import pandas as pd
+`SingleVariantMatcher` finds the interval-variant pairs with a polars-bio
+overlap join. Intervals and variants use 0-based, half-open coordinates:
+a variant overlaps an interval if `variant.start < interval.end` and
+`interval.start < variant.end`, with `variant.start = pos - 1` and
+`variant.end = variant.start + len(ref)`.
+
+The matchers need the `ranges` extra (polars and polars-bio).
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.variant_source import VariantFetcher
 
-try:
-    from pyranges import PyRanges
-except ImportError:
-    from typing import Any
-
-    PyRanges = Any
+if TYPE_CHECKING:
+    import polars as pl
 
 __all__ = [
-    "variants_to_pyranges",
+    "intervals_to_polars",
+    "variants_to_polars",
+    "overlap_variants",
+    "VariantListFetcher",
     "BaseVariantMatcher",
     "SingleVariantMatcher",
     "MultiVariantsMatcher",
 ]
 
 
-def variants_to_pyranges(variants: List[Variant]) -> PyRanges:
-    """
-    Create pyrange object given list of variant objects.
+def _import_polars():
+    try:
+        import polars as pl
+        import polars_bio as pb
+    except ImportError as e:
+        raise ImportError("Variant matching needs the `ranges` extra: pip install 'kipoiseq2[ranges]'") from e
+    return pl, pb
+
+
+def intervals_to_polars(intervals: Iterable[Interval]) -> pl.DataFrame:
+    """Convert intervals to a polars DataFrame.
 
     Args:
-      variants: list of variant objects have CHROM, POS, REF, ALT properties.
-    """
-    import pyranges
+      intervals: Interval objects.
 
-    df = pd.DataFrame(
-        [(v.chrom, v.start, v.end, v) for v in variants], columns=["Chromosome", "Start", "End", "variant"]
+    Returns:
+      DataFrame with the columns chrom, start, end (0-based, half-open)
+      and strand, one row per interval.
+    """
+    pl, _ = _import_polars()
+    intervals = list(intervals)
+    return pl.DataFrame(
+        {
+            "chrom": [i.chrom for i in intervals],
+            "start": [i.start for i in intervals],
+            "end": [i.end for i in intervals],
+            "strand": [i.strand for i in intervals],
+        },
+        schema={"chrom": pl.String, "start": pl.Int64, "end": pl.Int64, "strand": pl.String},
     )
-    return pyranges.PyRanges(df)
 
 
-def pyranges_to_intervals(pr: PyRanges, interval_attrs: Optional[List[str]] = None):
-    """
-    Convert pyranges into list of intervals.
-
+def variants_to_polars(variants: Iterable[Variant]) -> pl.DataFrame:
+    """Convert variants to a polars DataFrame.
 
     Args:
-      pr: pyranges.PyRanges
-      interval_attrs: attribute of interval which should substituted from pr.
+      variants: Variant objects.
 
     Returns:
-      List[Interval]: list of intervals
+      DataFrame with the columns chrom, start (`pos - 1`), end
+      (`start + len(ref)`), pos (the 1-based VCF POS), ref and alt, one row
+      per variant.
     """
-    interval_attrs = interval_attrs or list()
-    for chrom, df in pr:
-        for _, row in df.iterrows():
-            attrs = {i: row[i] for i in interval_attrs}
+    pl, _ = _import_polars()
+    variants = list(variants)
+    return pl.DataFrame(
+        {
+            "chrom": [v.chrom for v in variants],
+            "start": [v.start for v in variants],
+            "end": [v.end for v in variants],
+            "pos": [v.pos for v in variants],
+            "ref": [v.ref for v in variants],
+            "alt": [v.alt for v in variants],
+        },
+        schema={
+            "chrom": pl.String,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "pos": pl.Int64,
+            "ref": pl.String,
+            "alt": pl.String,
+        },
+    )
 
-            yield Interval(row.Chromosome, row.Start, row.End, strand=row.get("Strand", "."), attrs=attrs)
 
-
-def intervals_to_pyranges(intervals):
-    """
-    Convert list of intervals to pyranges
+def overlap_variants(intervals: pl.DataFrame, variants: pl.DataFrame) -> pl.DataFrame:
+    """Find all interval-variant pairs that overlap, with one polars-bio overlap join.
 
     Args:
-      intervals List[Interval]: list of intervals
+      intervals: DataFrame with the columns chrom, start and end in 0-based,
+        half-open coordinates, e.g. from `intervals_to_polars`.
+      variants: DataFrame with the columns chrom, start and end in 0-based,
+        half-open coordinates, e.g. from `variants_to_polars`.
 
     Returns:
-      pyranges.Pyranges: Pyranges object.
+      One row per overlapping pair, sorted by variant_idx and then by
+      interval_idx. The columns are:
+
+      - all columns of `intervals` under their own names
+      - interval_idx: row number of the interval in `intervals`
+      - all columns of `variants` except chrom, with the prefix `variant_`
+        (e.g. variant_start, variant_end, variant_ref)
+      - variant_idx: row number of the variant in `variants`
     """
-    import pyranges
+    pl, pb = _import_polars()
+    left = intervals.with_row_index("interval_idx")
+    right = variants.with_row_index("variant_idx")
+    # polars-bio reads the coordinate system from per-frame metadata.
+    # pb.set_option would change the default of the whole process instead.
+    # polars-bio registers the config_meta namespace at import, so mypy does not know it.
+    left.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
+    right.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
+    joined = pb.overlap(
+        left,
+        right,
+        cols1=["chrom", "start", "end"],
+        cols2=["chrom", "start", "end"],
+        suffixes=("_1", "_2"),
+        overlap_output="join",
+        output_type="polars.DataFrame",
+    )
+    columns = [pl.col(f"{c}_1").alias(c) for c in (*intervals.columns, "interval_idx")]
+    columns += [pl.col(f"{c}_2").alias(f"variant_{c}") for c in variants.columns if c != "chrom"]
+    columns.append(pl.col("variant_idx_2").alias("variant_idx"))
+    # the order of the polars-bio output is not deterministic
+    return joined.select(columns).sort(["variant_idx", "interval_idx"])
 
-    chromosomes, starts, ends, strands = zip(*[(i.chrom, i.start, i.end, i.strand) for i in intervals])
-    return pyranges.PyRanges(chromosomes=chromosomes, strands=strands, starts=starts, ends=ends)
 
+class VariantListFetcher(VariantFetcher):
+    """Variant fetcher over Variant objects held in memory."""
 
-class PyrangesVariantFetcher(VariantFetcher):
-    def __init__(self, variants: List[Variant]):
-        self.variants = variants
-        self._variants_pr = None
-
-    @property
-    def variants_pr(self):
-        # convert to PyRanges on demand
-        if self._variants_pr is None:
-            self._variants_pr = variants_to_pyranges(self.variants)
-        return self._variants_pr
+    def __init__(self, variants: Iterable[Variant]):
+        self.variants = list(variants)
 
     def fetch_variants(self, interval: Union[Interval, Iterable[Interval]]) -> Iterator[Variant]:
-        if isinstance(interval, Interval):
-            interval = [interval]
-        # convert interval(s) to PyRanges object
-        interval_pr: PyRanges = intervals_to_pyranges(interval)
-        # join with variants
-        pr_join = interval_pr.join(self.variants_pr, suffix="_variant")
-
-        yield from pr_join.df["variant"]
+        """Yield the variants that overlap the interval(s), per interval in the given order."""
+        intervals = [interval] if isinstance(interval, Interval) else interval
+        for i in intervals:
+            for v in self.variants:
+                if v.chrom == i.chrom and v.start < i.end and i.start < v.end:
+                    yield v
 
     def __iter__(self) -> Iterator[Variant]:
         yield from self.variants
@@ -105,32 +164,40 @@ class BaseVariantMatcher:
     def __init__(
         self,
         vcf_file: Optional[str] = None,
-        variants: Optional[List[Variant]] = None,
+        variants: Optional[Sequence[Variant]] = None,
         variant_fetcher: Optional[VariantFetcher] = None,
-        gtf_path: Optional[str] = None,
-        bed_path: Optional[str] = None,
-        pranges: Optional[PyRanges] = None,
-        intervals: Optional[List[Interval]] = None,
-        interval_attrs: Optional[List[str]] = None,
+        *,
+        regions: Optional[pl.DataFrame] = None,
+        intervals: Optional[Sequence[Interval]] = None,
+        interval_attrs: Optional[Sequence[str]] = None,
         vcf_lazy: bool = True,
         variant_batch_size: int = 10000,
     ):
         """
+        Give one source of variants (`vcf_file`, `variants` or
+        `variant_fetcher`) and one source of intervals (`regions` or
+        `intervals`).
 
         Args:
-          vcf_file: (optional) path of vcf file
-          variants: (optional) readily processed variants
-          gtf_path: (optional) path of gtf file contains features
-          bed_path: (optional) path of bed file
-          pranges: (optional) pyranges object
-          intervals: (optional) list of intervals
-          interval_attrs: attr of intervals should read from files or
-            pyranges object. This argument is not valid with intervals.
-            Currently unused
+          vcf_file: path of a VCF file, read with `MultiSampleVCF`
+            (needs the `vcf` extra).
+          variants: Variant objects.
+          variant_fetcher: a VariantFetcher, e.g. a `MultiSampleVCF`.
+          regions: polars DataFrame with the columns chrom, start and end
+            (0-based, half-open), an optional strand column and the
+            columns in `interval_attrs`.
+          intervals: Interval objects. The matchers yield these objects,
+            so they keep their name and attrs.
+          interval_attrs: columns of `regions` to copy into `Interval.attrs`.
+            Not valid with `intervals`.
+          vcf_lazy: passed to `MultiSampleVCF` as `lazy`.
+          variant_batch_size: number of variants per overlap join when
+            iterating over the pairs.
         """
         self.variant_fetcher = self._read_variants(vcf_file, variants, variant_fetcher, vcf_lazy)
-        self.interval_attrs = interval_attrs
-        self.pr = self._read_intervals(gtf_path, bed_path, pranges, intervals, interval_attrs, duplicate_attr=True)
+        self.interval_attrs = list(interval_attrs or [])
+        self.regions = self._read_intervals(regions, intervals, self.interval_attrs)
+        self._intervals = list(intervals) if intervals is not None else None
         self.variant_batch_size = variant_batch_size
 
     @staticmethod
@@ -150,34 +217,42 @@ class BaseVariantMatcher:
             )
             return variant_fetcher
         elif variants is not None:
-            return PyrangesVariantFetcher(variants)
+            return VariantListFetcher(variants)
         else:
             raise ValueError("No source of variants was specified!")
 
     @staticmethod
-    def _read_intervals(
-        gtf_path=None, bed_path=None, pranges=None, intervals=None, interval_attrs=None, duplicate_attr=False
-    ):
-        alternatives = [bed_path, pranges, intervals, gtf_path]
-        if sum(i is not None for i in alternatives) != 1:
-            raise ValueError("only one of `gth_path`, `bed_path`, `pranges`,`intervals` or should given as input.")
-        if gtf_path:
-            import pyranges
-
-            pranges = pyranges.read_gtf(gtf_path, duplicate_attr=duplicate_attr)
-
-        elif bed_path:
-            import pyranges
-
-            pranges = pyranges.read_bed(bed_path)
-
-        elif intervals:
-            if interval_attrs is not None:
+    def _read_intervals(regions=None, intervals=None, interval_attrs=()) -> pl.DataFrame:
+        """Return the intervals as a DataFrame with chrom, start, end, strand and the interval_attrs columns."""
+        pl, _ = _import_polars()
+        if (regions is None) == (intervals is None):
+            raise ValueError("Give exactly one of `regions` or `intervals`.")
+        if intervals is not None:
+            if interval_attrs:
                 raise ValueError("`interval_attrs` is not valid with `intervals`")
+            return intervals_to_polars(intervals)
 
-            pranges = intervals_to_pyranges(intervals)
+        missing = [c for c in ("chrom", "start", "end", *interval_attrs) if c not in regions.columns]
+        if missing:
+            raise ValueError("`regions` lacks the columns {}".format(missing))
+        strand = pl.col("strand") if "strand" in regions.columns else pl.lit(".")
+        return regions.select(
+            pl.col("chrom").cast(pl.String),
+            pl.col("start").cast(pl.Int64),
+            pl.col("end").cast(pl.Int64),
+            strand.cast(pl.String).alias("strand"),
+            *[pl.col(a) for a in interval_attrs],
+        )
 
-        return pranges
+    def _intervals_of(self, rows: pl.DataFrame) -> List[Interval]:
+        """Interval objects of the interval columns in `rows` (the regions or overlap_variants output)."""
+        if self._intervals is not None:
+            return [self._intervals[i] for i in rows.get_column("interval_idx")]
+        attrs = self.interval_attrs
+        return [
+            Interval(chrom, start, end, strand=strand, attrs=dict(zip(attrs, values)))
+            for chrom, start, end, strand, *values in rows.select("chrom", "start", "end", "strand", *attrs).iter_rows()
+        ]
 
     def __iter__(self):
         raise NotImplementedError()
@@ -185,74 +260,59 @@ class BaseVariantMatcher:
 
 class SingleVariantMatcher(BaseVariantMatcher):
     """
-    Match and iterate variants with intervals.
+    Match each variant with each interval it overlaps.
 
+    Iterating yields (Interval, Variant) pairs. `pairs()` returns all pairs
+    as one polars DataFrame.
     """
 
-    def __init__(self, *args, **kwargs):
-        """
+    def pairs(self) -> pl.DataFrame:
+        """Return all interval-variant pairs from one overlap join.
 
-        Args:
-          vcf_file: path of vcf file
-          gtf_path: (optional) path of gtf file contains features
-          bed_path: (optional) path of bed file
-          pranges: (optional) pyranges object
-          intervals: (optional) list of intervals
-          interval_attrs: attr of intervals should read from files or
-            pyranges object. This argument is not valid with intervals.
-        """
-        super().__init__(*args, **kwargs)
-
-    def _read_vcf_pyranges(self, batch_size=10000):
-        """
-        Reads vcf and returns batch of pyranges objects.
-
-        Args:
-          batch_size: size of each batch.
-        """
-        for batch in self.variant_fetcher.batch_iter(batch_size):
-            yield variants_to_pyranges(batch)
-
-    def iter_pyranges(self) -> PyRanges:
-        """
-
-        Iter matched variants with intervals as pyranges.
+        This reads all variants of the source into one polars DataFrame,
+        but keeps no Variant objects.
 
         Returns:
+          The pairs as described in `overlap_variants`. variant_idx counts
+          the variants in the order of the variant source.
+        """
+        pl, _ = _import_polars()
+        batches = [variants_to_polars(b) for b in self.variant_fetcher.batch_iter(self.variant_batch_size)]
+        variants = pl.concat(batches) if batches else variants_to_polars([])
+        return overlap_variants(self.regions, variants)
 
-        """
-        for pr_variants in self._read_vcf_pyranges():
-            pr_join = self.pr.join(pr_variants, suffix="_variant")
-            pr_join.intervals = list(pyranges_to_intervals(pr_join, interval_attrs=self.interval_attrs))
-            yield pr_join
+    def iter_batches(self) -> Iterator[Tuple[List[Variant], pl.DataFrame]]:
+        """Yield each batch of variants together with its pairs.
 
-    def iter_rows(self):
+        Each batch holds up to `variant_batch_size` variants and costs one
+        overlap join. In the pairs, variant_idx indexes into the batch.
         """
-        Iter matched variants with intervals as pandas series.
-        """
-        for pr in self.iter_pyranges():
-            for _, df in pr:
-                df = df.sort_values(["Start_variant", "Start"])
-                for _, row in df.iterrows():
-                    yield row
+        for batch in self.variant_fetcher.batch_iter(self.variant_batch_size):
+            batch = list(batch)
+            yield batch, overlap_variants(self.regions, variants_to_polars(batch))
 
     def __iter__(self) -> Iterator[Tuple[Interval, Variant]]:
         """
-        Iterate interval and variant object.
+        Yield (Interval, Variant) for each overlapping pair.
+
+        The pairs come in the order of the variant source, and per variant
+        in the order of the intervals.
         """
-        for row in self.iter_rows():
-            yield row["intervals"], row["variant"]
+        for batch, pairs in self.iter_batches():
+            intervals = self._intervals_of(pairs)
+            for interval, variant_idx in zip(intervals, pairs.get_column("variant_idx")):
+                yield interval, batch[variant_idx]
 
 
 class MultiVariantsMatcher(BaseVariantMatcher):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    """
+    Match each interval with all variants that overlap it.
 
-        if hasattr(self.pr, "intervals"):
-            self.intervals = self.pr.intervals
-        else:
-            self.intervals = pyranges_to_intervals(self.pr)
+    Iterating yields (Interval, variants) pairs in the order of the intervals.
+    The variants come from `VariantFetcher.fetch_variants`.
+    """
 
-    def __iter__(self):
-        for i in self.intervals:
+    def __iter__(self) -> Iterator[Tuple[Interval, Iterator[Variant]]]:
+        intervals = self._intervals if self._intervals is not None else self._intervals_of(self.regions)
+        for i in intervals:
             yield i, self.variant_fetcher.fetch_variants(i)

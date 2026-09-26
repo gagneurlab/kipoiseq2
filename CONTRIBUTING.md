@@ -82,8 +82,6 @@ Available environments (defined in `pyproject.toml`):
 | `format-check`  | `ruff format --check .`                  |
 | `lints`         | `ruff check .`                           |
 | `typecheck`     | `mypy kipoiseq2`                          |
-| `py3.10`        | Run pytest under Python 3.10             |
-| `py3.11`        | Run pytest under Python 3.11             |
 | `py3.12`        | Run pytest under Python 3.12             |
 | `py3.13`        | Run pytest under Python 3.13             |
 | `py3.14`        | Run pytest under Python 3.14             |
@@ -119,7 +117,7 @@ Before you submit a pull request, check that it meets these guidelines:
 
 1.  The pull request should include tests.
 2.  If the pull request adds functionality, the docs should be updated. Put your new functionality into a function with a docstring.
-3.  The pull request should pass CI on all supported Python versions (3.10 to 3.14, see `.github/workflows/ci.yml`).
+3.  The pull request should pass CI on all supported Python versions (3.12 to 3.14, see `.github/workflows/ci.yml`).
 
 ## Releases
 

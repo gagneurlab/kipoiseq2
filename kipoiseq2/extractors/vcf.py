@@ -17,7 +17,10 @@ __all__ = ["MultiSampleVCF"]
 
 class MultiSampleVCF(VariantFetcher, VCF):
     def __init__(self, *args, **kwargs):
-        from cyvcf2 import VCF
+        try:
+            from cyvcf2 import VCF
+        except ImportError as e:
+            raise ImportError("MultiSampleVCF needs the `vcf` extra: pip install 'kipoiseq2[vcf]'") from e
 
         VCF.__init__(self, *args, **kwargs, strict_gt=True)
         self.sample_mapping = dict(zip(self.samples, range(len(self.samples))))
