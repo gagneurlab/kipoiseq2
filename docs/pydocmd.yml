@@ -8,7 +8,7 @@ extra_css: [css/extra.css]
 # --------------------------
 repo_url: http://github.com/kipoi/kipoiseq2
 site_url: http://kipoi.org/docs/kipoiseq2/
-edit_uri: edit/master/docs/templates/
+edit_uri: edit/main/docs/templates/
 site_description: 'Documentation of kipoiseq2, sequence extractors and transforms for DNA sequence-based models.'
 
 dev_addr: '0.0.0.0:8000'
