@@ -38,12 +38,14 @@ def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
 
     Returns:
       LazyFrame with the columns chrom, start (`pos - 1`), end
-      (`start + len(ref)`), pos (the 1-based VCF POS), ref, alt, allele_idx
-      (the 1-based index of the ALT allele in the record) and the requested
-      INFO and FORMAT fields. start and end ignore INFO/END. A field with
-      one value per ALT allele (Number=A) keeps all values of the record,
-      so select the value of the row with
-      `pl.col("AF").list.get(pl.col("allele_idx") - 1)`.
+      (`start + len(ref)`), pos (the 1-based VCF POS), id, ref, alt,
+      allele_idx (the 1-based index of the ALT allele in the record), qual,
+      filter and the requested INFO and FORMAT fields. start and end ignore
+      INFO/END. polars-bio gives a missing ID or FILTER (`.`) as an empty
+      string and a missing QUAL as null. Several FILTER values stay joined
+      with `;`, e.g. "q10;s50". A field with one value per ALT allele
+      (Number=A) keeps all values of the record, so select the value of the
+      row with `pl.col("AF").list.get(pl.col("allele_idx") - 1)`.
     """
     pl, pb = _import_polars()
     scan = pb.scan_vcf(str(path), **{"use_zero_based": True, "info_fields": [], "format_fields": [], **scan_vcf_kwargs})
@@ -62,7 +64,7 @@ def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
         .explode("alt", "allele_idx", empty_as_null=False)
         .filter(~pl.col("alt").str.contains("[N*]"))
         .with_columns(start=start, end=start + pl.col("ref").str.len_chars())
-        .select("chrom", "start", "end", "pos", "ref", "alt", "allele_idx", *fields)
+        .select("chrom", "start", "end", "pos", "id", "ref", "alt", "allele_idx", "qual", "filter", *fields)
     )
 
 

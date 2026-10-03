@@ -168,7 +168,9 @@ class BaseVariantMatcher:
         Give one source of variants (`vcf_file` or `variants`) and the intervals.
 
         Args:
-          vcf_file: path of a VCF file, read with `scan_vcf_variants`.
+          vcf_file: path of a VCF file, read with `scan_vcf_variants`. Of its
+            columns, the matchers keep chrom, start, end, pos, ref, alt and
+            allele_idx.
           variants: either a polars DataFrame or LazyFrame, or Variant
             objects. A frame needs the columns chrom, pos (1-based), ref and
             alt, with one ALT allele per row. Its other columns pass through
@@ -202,7 +204,7 @@ class BaseVariantMatcher:
         if vcf_file is not None:
             from kipoiseq2.extractors.vcf import scan_vcf_variants
 
-            return scan_vcf_variants(vcf_file)
+            return scan_vcf_variants(vcf_file).select("chrom", "start", "end", "pos", "ref", "alt", "allele_idx")
         if not isinstance(variants, (pl.DataFrame, pl.LazyFrame)):
             # __iter__ yields these objects
             self._variants = list(variants)

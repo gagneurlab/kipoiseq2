@@ -66,6 +66,11 @@ def test_scan_vcf_variants_edge_cases(edge_case_vcf):
     ]
     # end follows REF, not INFO/END=40
     assert df.filter(pl.col("alt") == "<DEL>").select("start", "end").row(0) == (19, 23)
+    # a missing ID or FILTER is an empty string, and a missing QUAL is null
+    assert df.filter(pl.col("alt").is_in(["G", "<DEL>"])).select("id", "qual", "filter").rows() == [
+        ("rs1", 50.0, "PASS"),
+        ("", None, ""),
+    ]
 
 
 def test_scan_vcf_variants_columns():
@@ -76,9 +81,12 @@ def test_scan_vcf_variants_columns():
             "start": pl.Int64,
             "end": pl.Int64,
             "pos": pl.Int64,
+            "id": pl.String,
             "ref": pl.String,
             "alt": pl.String,
             "allele_idx": pl.Int64,
+            "qual": pl.Float64,
+            "filter": pl.String,
             "DP": pl.Int32,
         }
     )
@@ -117,9 +125,12 @@ def test_scan_vcf_genotypes_all_rows(edge_case_vcf):
         "start",
         "end",
         "pos",
+        "id",
         "ref",
         "alt",
         "allele_idx",
+        "qual",
+        "filter",
         "sample",
         "GT",
         "GQ",

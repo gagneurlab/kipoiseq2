@@ -178,7 +178,16 @@ def test_SingleVariantMatcher_pairs():
         ("g3", 25, "AACG", "GA"),
     ]
     assert pairs["variant_idx"].to_list() == [0, 1, 2, 2]
-    # the columns of scan_vcf_variants pass through
+    # of the columns of scan_vcf_variants, the matcher keeps the coordinates, ref, alt and allele_idx
+    assert [c for c in pairs.columns if c.startswith("variant_")] == [
+        "variant_start",
+        "variant_end",
+        "variant_pos",
+        "variant_ref",
+        "variant_alt",
+        "variant_allele_idx",
+        "variant_idx",
+    ]
     assert pairs["variant_allele_idx"].to_list() == [1, 1, 1, 1]
 
 

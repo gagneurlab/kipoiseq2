@@ -52,7 +52,7 @@ Its coordinates follow `Variant`: `start` is `pos - 1` and `end` is `start + len
 import polars as pl
 from kipoiseq2.extractors import scan_vcf_variants
 
-# chrom, start, end, pos, ref, alt, allele_idx and the INFO field AF
+# chrom, start, end, pos, id, ref, alt, allele_idx, qual, filter and the INFO field AF
 variants = scan_vcf_variants("variants.vcf.gz", info_fields=["AF"])
 # AF holds one value per ALT allele of the record, and allele_idx picks the one of this row
 common = variants.filter(pl.col("AF").list.get(pl.col("allele_idx") - 1) > 0.01).collect()
@@ -121,8 +121,9 @@ kipoiseq2 also drops these parts of kipoiseq:
 kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra is gone and the `ranges` extra covers VCF reading:
 - `MultiSampleVCF` becomes `scan_vcf_variants`, with one row per ALT allele, or `scan_vcf_genotypes`, with one row per ALT allele and sample.
   Both return a polars LazyFrame instead of Variant objects.
-- `query_all().filter(lambda ...)` becomes a polars filter, e.g. `scan_vcf_variants(path).filter(pl.col("alt").str.len_chars() == 1)`.
-  For QUAL and FILTER, filter the frame of `polars_bio.scan_vcf(path)`.
+- `query_all().filter(lambda ...)` and `FilterVariantQuery` become a polars filter on `scan_vcf_variants(path)`.
+  For example, `filter(lambda v: v.qual > 10)` becomes `.filter(pl.col("qual") > 10)`, and `FilterVariantQuery()` becomes `.filter(pl.col("filter") == "PASS")`.
+  polars-bio gives a missing QUAL (`.`) as null and a missing FILTER (`.`) as an empty string.
 - `fetch_variants`, `query_variants`, `get_variant` and `get_variants` become `SingleVariantMatcher` or `MultiVariantsMatcher`, or a filter or join on `scan_vcf_variants(path)`.
 - `get_samples`, `has_variant` and `to_sample_csv` become `scan_vcf_genotypes(path, format_fields=[...])`, and `.sink_csv(path)` writes the CSV.
   The carrier check works per ALT allele, not per record: a sample with GT 0/2 carries the second ALT allele only.
