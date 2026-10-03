@@ -11,7 +11,7 @@ The matchers need the `ranges` extra (polars and polars-bio).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, cast
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.variant_source import VariantFetcher
@@ -167,37 +167,37 @@ class BaseVariantMatcher:
         variants: Optional[Sequence[Variant]] = None,
         variant_fetcher: Optional[VariantFetcher] = None,
         *,
-        regions: Optional[pl.DataFrame] = None,
-        intervals: Optional[Sequence[Interval]] = None,
+        intervals: Union[pl.DataFrame, Sequence[Interval]],
         interval_attrs: Optional[Sequence[str]] = None,
         vcf_lazy: bool = True,
         variant_batch_size: int = 10000,
     ):
         """
         Give one source of variants (`vcf_file`, `variants` or
-        `variant_fetcher`) and one source of intervals (`regions` or
-        `intervals`).
+        `variant_fetcher`) and the intervals.
 
         Args:
           vcf_file: path of a VCF file, read with `MultiSampleVCF`
             (needs the `vcf` extra).
           variants: Variant objects.
           variant_fetcher: a VariantFetcher, e.g. a `MultiSampleVCF`.
-          regions: polars DataFrame with the columns chrom, start and end
-            (0-based, half-open), an optional strand column and the
-            columns in `interval_attrs`.
-          intervals: Interval objects. The matchers yield these objects,
-            so they keep their name and attrs.
-          interval_attrs: columns of `regions` to copy into `Interval.attrs`.
-            Not valid with `intervals`.
+          intervals: either a polars DataFrame with the columns chrom, start
+            and end (0-based, half-open), an optional strand column and the
+            columns in `interval_attrs`, or Interval objects. The matchers
+            yield Interval objects as given, so they keep their name and attrs.
+          interval_attrs: columns of the `intervals` DataFrame to copy into
+            `Interval.attrs`. Not valid with Interval objects.
           vcf_lazy: passed to `MultiSampleVCF` as `lazy`.
           variant_batch_size: number of variants per overlap join when
             iterating over the pairs.
         """
         self.variant_fetcher = self._read_variants(vcf_file, variants, variant_fetcher, vcf_lazy)
         self.interval_attrs = list(interval_attrs or [])
-        self.regions = self._read_intervals(regions, intervals, self.interval_attrs)
-        self._intervals = list(intervals) if intervals is not None else None
+        pl, _ = _import_polars()
+        self._interval_frame = self._read_intervals(intervals, self.interval_attrs)
+        self._intervals: Optional[List[Interval]] = None
+        if not isinstance(intervals, pl.DataFrame):
+            self._intervals = list(cast(Sequence[Interval], intervals))
         self.variant_batch_size = variant_batch_size
 
     @staticmethod
@@ -222,21 +222,19 @@ class BaseVariantMatcher:
             raise ValueError("No source of variants was specified!")
 
     @staticmethod
-    def _read_intervals(regions=None, intervals=None, interval_attrs=()) -> pl.DataFrame:
+    def _read_intervals(intervals, interval_attrs=()) -> pl.DataFrame:
         """Return the intervals as a DataFrame with chrom, start, end, strand and the interval_attrs columns."""
         pl, _ = _import_polars()
-        if (regions is None) == (intervals is None):
-            raise ValueError("Give exactly one of `regions` or `intervals`.")
-        if intervals is not None:
+        if not isinstance(intervals, pl.DataFrame):
             if interval_attrs:
-                raise ValueError("`interval_attrs` is not valid with `intervals`")
+                raise ValueError("`interval_attrs` is not valid with Interval objects")
             return intervals_to_polars(intervals)
 
-        missing = [c for c in ("chrom", "start", "end", *interval_attrs) if c not in regions.columns]
+        missing = [c for c in ("chrom", "start", "end", *interval_attrs) if c not in intervals.columns]
         if missing:
-            raise ValueError("`regions` lacks the columns {}".format(missing))
-        strand = pl.col("strand") if "strand" in regions.columns else pl.lit(".")
-        return regions.select(
+            raise ValueError("`intervals` lacks the columns {}".format(missing))
+        strand = pl.col("strand") if "strand" in intervals.columns else pl.lit(".")
+        return intervals.select(
             pl.col("chrom").cast(pl.String),
             pl.col("start").cast(pl.Int64),
             pl.col("end").cast(pl.Int64),
@@ -245,7 +243,7 @@ class BaseVariantMatcher:
         )
 
     def _intervals_of(self, rows: pl.DataFrame) -> List[Interval]:
-        """Interval objects of the interval columns in `rows` (the regions or overlap_variants output)."""
+        """Interval objects of the interval columns in `rows` (the interval frame or overlap_variants output)."""
         if self._intervals is not None:
             return [self._intervals[i] for i in rows.get_column("interval_idx")]
         attrs = self.interval_attrs
@@ -279,7 +277,7 @@ class SingleVariantMatcher(BaseVariantMatcher):
         pl, _ = _import_polars()
         batches = [variants_to_polars(b) for b in self.variant_fetcher.batch_iter(self.variant_batch_size)]
         variants = pl.concat(batches) if batches else variants_to_polars([])
-        return overlap_variants(self.regions, variants)
+        return overlap_variants(self._interval_frame, variants)
 
     def iter_batches(self) -> Iterator[Tuple[List[Variant], pl.DataFrame]]:
         """Yield each batch of variants together with its pairs.
@@ -289,7 +287,7 @@ class SingleVariantMatcher(BaseVariantMatcher):
         """
         for batch in self.variant_fetcher.batch_iter(self.variant_batch_size):
             batch = list(batch)
-            yield batch, overlap_variants(self.regions, variants_to_polars(batch))
+            yield batch, overlap_variants(self._interval_frame, variants_to_polars(batch))
 
     def __iter__(self) -> Iterator[Tuple[Interval, Variant]]:
         """
@@ -313,6 +311,6 @@ class MultiVariantsMatcher(BaseVariantMatcher):
     """
 
     def __iter__(self) -> Iterator[Tuple[Interval, Iterator[Variant]]]:
-        intervals = self._intervals if self._intervals is not None else self._intervals_of(self.regions)
+        intervals = self._intervals if self._intervals is not None else self._intervals_of(self._interval_frame)
         for i in intervals:
             yield i, self.variant_fetcher.fetch_variants(i)

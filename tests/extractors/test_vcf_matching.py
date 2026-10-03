@@ -25,7 +25,7 @@ intervals = [
 
 variants = [Variant("chr1", 4, "T", "C"), Variant("chr1", 5, "A", "GA"), Variant("chr1", 25, "AACG", "GA")]
 
-regions = pl.DataFrame(
+interval_frame = pl.DataFrame(
     {
         "chrom": ["chr1", "chr1", "chr1", "chr10"],
         "start": [1, 23, 5, 1],
@@ -84,7 +84,7 @@ def test_intervals_to_polars():
 
 
 def test_overlap_variants():
-    pairs = overlap_variants(regions, variants_to_polars(variants))
+    pairs = overlap_variants(interval_frame, variants_to_polars(variants))
     assert pairs.columns == [
         "chrom",
         "start",
@@ -118,36 +118,43 @@ def test_overlap_variants():
 
 
 def test_overlap_variants_empty():
-    pairs = overlap_variants(regions, variants_to_polars([]))
+    pairs = overlap_variants(interval_frame, variants_to_polars([]))
     assert pairs.height == 0
     assert "variant_idx" in pairs.columns
-    assert overlap_variants(regions.clear(), variants_to_polars(variants)).height == 0
+    assert overlap_variants(interval_frame.clear(), variants_to_polars(variants)).height == 0
 
 
 def test_BaseVariantMatcher__read_intervals():
     with pytest.raises(ValueError):
-        BaseVariantMatcher._read_intervals(regions=regions, intervals=intervals)
-
-    with pytest.raises(ValueError):
-        BaseVariantMatcher._read_intervals()
-
-    with pytest.raises(ValueError):
         BaseVariantMatcher._read_intervals(intervals=intervals, interval_attrs=["gene_id"])
 
     with pytest.raises(ValueError, match="gene_name"):
-        BaseVariantMatcher._read_intervals(regions=regions, interval_attrs=["gene_name"])
+        BaseVariantMatcher._read_intervals(intervals=interval_frame, interval_attrs=["gene_name"])
 
-    df = BaseVariantMatcher._read_intervals(regions=regions)
+    df = BaseVariantMatcher._read_intervals(intervals=interval_frame)
     assert df.columns == ["chrom", "start", "end", "strand"]
     assert df["start"].to_list() == [1, 23, 5, 1]
 
-    df = BaseVariantMatcher._read_intervals(regions=regions.drop("strand"), interval_attrs=["gene_id"])
+    df = BaseVariantMatcher._read_intervals(intervals=interval_frame.drop("strand"), interval_attrs=["gene_id"])
     assert df.columns == ["chrom", "start", "end", "strand", "gene_id"]
     assert df["strand"].to_list() == ["."] * 4
 
     df = BaseVariantMatcher._read_intervals(intervals=intervals)
     assert df["chrom"].to_list() == ["chr1", "chr1", "chr10"]
     assert df["strand"].to_list() == ["+", "-", "+"]
+
+
+def test_BaseVariantMatcher_intervals_input():
+    from_frame = SingleVariantMatcher(variants=variants, intervals=interval_frame)
+    assert from_frame._intervals is None
+    assert from_frame._interval_frame.height == interval_frame.height
+
+    from_objects = SingleVariantMatcher(variants=variants, intervals=intervals)
+    assert from_objects._intervals == intervals
+    assert from_objects._interval_frame["chrom"].to_list() == ["chr1", "chr1", "chr10"]
+
+    with pytest.raises(TypeError):
+        SingleVariantMatcher(variants=variants)
 
 
 def test_SingleVariantMatcher__iter__():
@@ -159,16 +166,18 @@ def test_SingleVariantMatcher__iter__():
         (inters[3], variants[2]),
     ]
 
-    assert list(SingleVariantMatcher(vcf_file, regions=regions)) == expected
-    assert list(SingleVariantMatcher(variants=variants, regions=regions)) == expected
-    assert list(SingleVariantMatcher(variant_fetcher=VariantListFetcher(variants), regions=regions)) == expected
+    assert list(SingleVariantMatcher(vcf_file, intervals=interval_frame)) == expected
+    assert list(SingleVariantMatcher(variants=variants, intervals=interval_frame)) == expected
+    assert (
+        list(SingleVariantMatcher(variant_fetcher=VariantListFetcher(variants), intervals=interval_frame)) == expected
+    )
     assert list(SingleVariantMatcher(vcf_file, intervals=inters)) == expected
     # one variant per overlap join gives the same pairs
-    assert list(SingleVariantMatcher(vcf_file, regions=regions, variant_batch_size=1)) == expected
+    assert list(SingleVariantMatcher(vcf_file, intervals=interval_frame, variant_batch_size=1)) == expected
 
 
 def test_SingleVariantMatcher_interval_attrs():
-    pairs = list(SingleVariantMatcher(vcf_file, regions=regions, interval_attrs=["gene_id"]))
+    pairs = list(SingleVariantMatcher(vcf_file, intervals=interval_frame, interval_attrs=["gene_id"]))
     assert [i.attrs for i, _ in pairs] == [{"gene_id": "g1"}, {"gene_id": "g1"}, {"gene_id": "g2"}, {"gene_id": "g3"}]
 
 
@@ -180,7 +189,7 @@ def test_SingleVariantMatcher_yields_given_intervals():
 
 
 def test_SingleVariantMatcher_pairs():
-    matcher = SingleVariantMatcher(vcf_file, regions=regions, interval_attrs=["gene_id"], variant_batch_size=2)
+    matcher = SingleVariantMatcher(vcf_file, intervals=interval_frame, interval_attrs=["gene_id"], variant_batch_size=2)
     pairs = matcher.pairs()
     assert pairs.select("gene_id", "variant_pos", "variant_ref", "variant_alt").rows() == [
         ("g1", 4, "T", "C"),
@@ -193,7 +202,7 @@ def test_SingleVariantMatcher_pairs():
 
 
 def test_SingleVariantMatcher_iter_batches():
-    matcher = SingleVariantMatcher(variants=variants, regions=regions, variant_batch_size=2)
+    matcher = SingleVariantMatcher(variants=variants, intervals=interval_frame, variant_batch_size=2)
     batches = list(matcher.iter_batches())
     assert [len(b) for b, _ in batches] == [2, 1]
     assert [p["variant_idx"].to_list() for _, p in batches] == [[0, 1], [0, 0]]
@@ -208,7 +217,7 @@ def test_MultiVariantMatcher__iter__():
     assert pairs[1][0] == intervals[1]
     assert list(pairs[1][1]) == [variants[2]]
 
-    matcher = MultiVariantsMatcher(vcf_file, regions=regions)
+    matcher = MultiVariantsMatcher(vcf_file, intervals=interval_frame)
     pairs = list(matcher)
 
     assert pairs[0][0] == intervals[0]
@@ -216,7 +225,7 @@ def test_MultiVariantMatcher__iter__():
     assert pairs[1][0] == intervals[1]
     assert list(pairs[1][1]) == [variants[2]]
 
-    matcher = MultiVariantsMatcher(variants=variants, regions=regions)
+    matcher = MultiVariantsMatcher(variants=variants, intervals=interval_frame)
     pairs = list(matcher)
 
     assert pairs[0][0] == intervals[0]

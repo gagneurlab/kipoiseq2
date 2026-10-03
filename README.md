@@ -55,13 +55,13 @@ from kipoiseq2.extractors import SingleVariantMatcher
 
 # chrom, start, end (0-based, half-open), optional strand, and any attribute columns
 exons = pl.DataFrame({"chrom": ["chr1"], "start": [100], "end": [200], "strand": ["+"], "exon_id": ["e1"]})
-matcher = SingleVariantMatcher("variants.vcf.gz", regions=exons, interval_attrs=["exon_id"])
+matcher = SingleVariantMatcher("variants.vcf.gz", intervals=exons, interval_attrs=["exon_id"])
 
 # all pairs as one polars DataFrame: interval columns, interval_idx, variant_* columns, variant_idx
 pairs = matcher.pairs()
 
 # or iterate (Interval, Variant) pairs; interval.attrs holds exon_id, variant.source the cyvcf2 record
-for interval, variant in SingleVariantMatcher("variants.vcf.gz", regions=exons, interval_attrs=["exon_id"]):
+for interval, variant in SingleVariantMatcher("variants.vcf.gz", intervals=exons, interval_attrs=["exon_id"]):
     ...
 ```
 
@@ -84,12 +84,12 @@ kipoiseq2 also drops these parts of kipoiseq:
 - the `progress` argument of `MultiSampleVCF.query_variants`, `MultiSampleVCF.query_all` and `VariantIntervalQueryable`
 
 The matchers use polars instead of pyranges:
-- `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `regions`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`.
-  For a PyRanges object `pr`, pass `regions=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
-- `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `regions`.
+- `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`. `intervals` also takes a sequence of Interval objects.
+  For a PyRanges object `pr`, pass `intervals=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
+- `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `intervals`.
 - Arguments after `variant_fetcher` are keyword-only.
 - `SingleVariantMatcher` yields the pairs in VCF order instead of grouped by chromosome and strand.
-  With `intervals=`, it yields the given Interval objects, so they keep their name and attrs.
+  With a sequence of Interval objects as `intervals`, it yields these objects, so they keep their name and attrs.
 - `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by `pairs()` and `iter_batches()`, which return polars DataFrames.
 - `variants_to_pyranges`, `intervals_to_pyranges` and `pyranges_to_intervals` are replaced by `variants_to_polars` and `intervals_to_polars`; `PyrangesVariantFetcher` is now `VariantListFetcher`.
 
