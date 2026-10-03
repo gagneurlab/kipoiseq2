@@ -114,28 +114,38 @@ def overlap_variants(intervals: pl.DataFrame, variants: pl.DataFrame) -> pl.Data
         (e.g. variant_start, variant_end, variant_ref)
       - variant_idx: row number of the variant in `variants`
     """
+    # the order of the polars-bio output is not deterministic
+    return _overlap_lazy(intervals, variants).collect().sort(["variant_idx", "interval_idx"])
+
+
+def _overlap_lazy(intervals: pl.DataFrame, variants: Union[pl.DataFrame, pl.LazyFrame]) -> pl.LazyFrame:
+    """Return the pairs of `overlap_variants` as a LazyFrame, without sorting.
+
+    polars-bio indexes the second input (df2) in memory and streams the first
+    input (df1). So the variants go into df1, and a large VCF does not need an
+    index in memory.
+    """
     pl, pb = _import_polars()
-    left = intervals.with_row_index("interval_idx")
-    right = variants.with_row_index("variant_idx")
+    df1 = variants.with_row_index("variant_idx")
+    df2 = intervals.with_row_index("interval_idx")
     # polars-bio reads the coordinate system from per-frame metadata.
     # pb.set_option would change the default of the whole process instead.
     # polars-bio registers the config_meta namespace at import, so mypy does not know it.
-    left.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
-    right.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
+    df1.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[union-attr]
+    df2.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
     joined = pb.overlap(
-        left,
-        right,
+        df1,
+        df2,
         cols1=["chrom", "start", "end"],
         cols2=["chrom", "start", "end"],
         suffixes=("_1", "_2"),
         overlap_output="join",
-        output_type="polars.DataFrame",
+        output_type="polars.LazyFrame",
     )
-    columns = [pl.col(f"{c}_1").alias(c) for c in (*intervals.columns, "interval_idx")]
-    columns += [pl.col(f"{c}_2").alias(f"variant_{c}") for c in variants.columns if c != "chrom"]
-    columns.append(pl.col("variant_idx_2").alias("variant_idx"))
-    # the order of the polars-bio output is not deterministic
-    return joined.select(columns).sort(["variant_idx", "interval_idx"])
+    columns = [pl.col(f"{c}_2").alias(c) for c in (*intervals.columns, "interval_idx")]
+    columns += [pl.col(f"{c}_1").alias(f"variant_{c}") for c in variants.collect_schema().names() if c != "chrom"]
+    columns.append(pl.col("variant_idx_1").alias("variant_idx"))
+    return joined.select(columns)
 
 
 class VariantListFetcher(VariantFetcher):
