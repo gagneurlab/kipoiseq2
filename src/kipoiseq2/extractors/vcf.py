@@ -1,8 +1,9 @@
 """Read VCF files.
 
 `scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame,
-with one row per ALT allele. It needs the `ranges` extra (polars and
-polars-bio).
+with one row per ALT allele. `scan_vcf_genotypes` adds one row per sample,
+with the FORMAT fields of the sample and whether it carries the ALT allele.
+Both need the `ranges` extra (polars and polars-bio).
 
 `MultiSampleVCF` reads a VCF file with cyvcf2 and yields Variant objects.
 It needs the `vcf` extra.
@@ -10,9 +11,10 @@ It needs the `vcf` extra.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Sequence, Union
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors.vcf_matching import _import_polars
@@ -28,7 +30,7 @@ try:
 except ImportError:
     VCF = object
 
-__all__ = ["scan_vcf_variants", "MultiSampleVCF"]
+__all__ = ["scan_vcf_variants", "scan_vcf_genotypes", "MultiSampleVCF"]
 
 # the columns of polars_bio.scan_vcf without INFO and FORMAT fields
 _SCAN_VCF_COLUMNS = ("chrom", "start", "end", "id", "ref", "alt", "qual", "filter")
@@ -76,6 +78,61 @@ def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
         .with_columns(start=start, end=start + pl.col("ref").str.len_chars())
         .select("chrom", "start", "end", "pos", "ref", "alt", "allele_idx", *fields)
     )
+
+
+def scan_vcf_genotypes(
+    path: str,
+    samples: Optional[Sequence[str]] = None,
+    format_fields: Sequence[str] = ("GT",),
+    carriers_only: bool = True,
+    **scan_vcf_kwargs,
+) -> pl.LazyFrame:
+    """Read the genotypes of a VCF file as a polars LazyFrame, with one row per ALT allele and sample.
+
+    A sample carries an ALT allele if its GT contains the allele_idx of the
+    row. GT may be haploid or phased, and missing alleles (`.`) are ignored.
+    So a sample with GT 0/2 carries the second ALT allele but not the first
+    one, and a sample with GT ./1 carries the first ALT allele.
+
+    Args:
+      path: path of the VCF file.
+      samples: names of the samples to read. The default reads all samples.
+      format_fields: FORMAT fields to read. GT is always read.
+      carriers_only: keep only the rows where the sample carries the ALT allele.
+      **scan_vcf_kwargs: more keyword arguments of `polars_bio.scan_vcf`,
+        as in `scan_vcf_variants`.
+
+    Returns:
+      LazyFrame with the columns of `scan_vcf_variants`, then sample, GT,
+      the other FORMAT fields with the value of the sample, and carrier.
+      FORMAT fields with several values per sample, such as AD, are lists.
+    """
+    pl, _ = _import_polars()
+    fields = ["GT", *(f for f in format_fields if f != "GT")]
+    variants = scan_vcf_variants(
+        path, samples=None if samples is None else list(samples), format_fields=fields, **scan_vcf_kwargs
+    )
+    sample_names = json.loads(variants.config_meta.get_metadata()["source_header"])["sample_names"]  # type: ignore[attr-defined]
+    if not sample_names:
+        raise ValueError("{} has no samples, or none of the requested ones".format(path))
+    columns = variants.collect_schema().names()
+    if "genotypes" in columns:
+        # for a multi-sample VCF, also with samples=[one], polars-bio returns the FORMAT fields
+        # as a struct of lists, with one list item per sample
+        columns.remove("genotypes")
+        genotypes = (
+            variants.with_columns(sample=pl.lit(sample_names, dtype=pl.List(pl.String)))
+            .unnest("genotypes")
+            .explode("sample", *fields, empty_as_null=False)
+        )
+    else:
+        # for a single-sample VCF, polars-bio returns the FORMAT fields as columns
+        columns = [c for c in columns if c not in fields]
+        genotypes = variants.with_columns(sample=pl.lit(sample_names[0]))
+    alleles = pl.col("GT").str.extract_all(r"\d+")
+    carrier = alleles.list.contains(pl.col("allele_idx").cast(pl.String)).fill_null(False)
+    genotypes = genotypes.select(*columns, "sample", *fields, carrier.alias("carrier"))
+    return genotypes.filter("carrier") if carriers_only else genotypes
 
 
 class MultiSampleVCF(VariantFetcher, VCF):

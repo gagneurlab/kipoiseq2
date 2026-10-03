@@ -15,7 +15,7 @@ Requires Python >= 3.12.
 ```bash
 pip install kipoiseq2               # FASTA extractors and transforms (numpy, pyfaidx)
 pip install 'kipoiseq2[vcf]'        # + MultiSampleVCF and the VCF-based extractors (cyvcf2)
-pip install 'kipoiseq2[ranges]'     # + scan_vcf_variants, SingleVariantMatcher and MultiVariantsMatcher (polars, polars-bio)
+pip install 'kipoiseq2[ranges]'     # + scan_vcf_variants, scan_vcf_genotypes and the variant matchers (polars, polars-bio)
 pip install 'kipoiseq2[vcf,ranges]' # everything
 ```
 
@@ -57,6 +57,17 @@ from kipoiseq2.extractors import scan_vcf_variants
 variants = scan_vcf_variants("variants.vcf.gz", info_fields=["AF"])
 # AF holds one value per ALT allele of the record, and allele_idx picks the one of this row
 common = variants.filter(pl.col("AF").list.get(pl.col("allele_idx") - 1) > 0.01).collect()
+```
+
+`scan_vcf_genotypes` adds one row per sample, with the FORMAT fields of the sample.
+By default it keeps only the samples that carry the ALT allele of the row: a sample with GT 0/2 carries the second ALT allele, but not the first.
+
+```python
+from kipoiseq2.extractors import scan_vcf_genotypes
+
+# the columns of scan_vcf_variants, then sample, GT, GQ and carrier
+carriers = scan_vcf_genotypes("variants.vcf.gz", format_fields=["GT", "GQ"])
+carriers.sink_csv("carriers.csv")
 ```
 
 ### Matching variants with intervals

@@ -2,10 +2,10 @@ import sys
 
 import polars as pl
 import pytest
-from conftest import sample_5kb_fasta_file, test_with_multiple_variants, vcf_file
+from conftest import EDGE_CASE_VCF, sample_5kb_fasta_file, test_with_multiple_variants, vcf_file
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors.vcf import MultiSampleVCF, scan_vcf_variants
+from kipoiseq2.extractors.vcf import MultiSampleVCF, scan_vcf_genotypes, scan_vcf_variants
 from kipoiseq2.extractors.vcf_query import NumberVariantQuery
 
 fasta_file = sample_5kb_fasta_file
@@ -230,3 +230,84 @@ def test_scan_vcf_variants_columns():
     )
     # start and end do not depend on the coordinate system of polars-bio
     assert scan_vcf_variants(vcf_file, use_zero_based=False).collect().equals(scan_vcf_variants(vcf_file).collect())
+
+
+def _cyvcf2_carriers(path):
+    """chrom, pos, ref, alt and sample of each sample that MultiSampleVCF.get_samples returns."""
+    vcf = MultiSampleVCF(path)
+    return [(v.chrom, v.pos, v.ref, v.alt, sample) for v in vcf for sample in vcf.get_samples(v)]
+
+
+@pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants])
+def test_scan_vcf_genotypes_equals_MultiSampleVCF_get_samples(path):
+    # these VCFs have one ALT allele per record, so carriers per record and per ALT allele are the same
+    df = scan_vcf_genotypes(path).collect()
+    assert df.select("chrom", "pos", "ref", "alt", "sample").rows() == _cyvcf2_carriers(path)
+
+
+def test_scan_vcf_genotypes_per_allele(edge_case_vcf):
+    df = scan_vcf_genotypes(edge_case_vcf).collect()
+    assert df.select("pos", "alt", "sample", "GT").rows() == [
+        (10, "C", "S2", "1|1"),
+        # 0/2 carries the second ALT allele only
+        (10, "G", "S1", "0/2"),
+        (20, "<DEL>", "S1", "0/1"),
+        (20, "<DEL>", "S2", "1/2"),
+        # haploid
+        (5, "T", "S1", "1"),
+        # the missing allele is ignored
+        (5, "T", "S3", ".|1"),
+        (5, "TAA", "S2", "3/2"),
+    ]
+    assert df["carrier"].all()
+
+
+def test_scan_vcf_genotypes_all_rows(edge_case_vcf):
+    df = scan_vcf_genotypes(edge_case_vcf, format_fields=["GQ", "AD"], carriers_only=False).collect()
+    assert df.columns == [
+        "chrom",
+        "start",
+        "end",
+        "pos",
+        "ref",
+        "alt",
+        "allele_idx",
+        "sample",
+        "GT",
+        "GQ",
+        "AD",
+        "carrier",
+    ]
+    # 6 ALT alleles times 3 samples
+    assert df.height == 18
+    assert df.filter(pl.col("pos") == 10).select("alt", "sample", "GT", "GQ", "AD", "carrier").rows() == [
+        ("C", "S1", "0/2", 30, [5, 0, 5], False),
+        ("C", "S2", "1|1", 20, [0, 8, 0], True),
+        ("C", "S3", "./.", None, None, False),
+        ("G", "S1", "0/2", 30, [5, 0, 5], True),
+        ("G", "S2", "1|1", 20, [0, 8, 0], False),
+        ("G", "S3", "./.", None, None, False),
+    ]
+    # a missing GT is not a carrier
+    assert df.filter((pl.col("pos") == 30) & (pl.col("sample") == "S3")).select("GT", "carrier").row(0) == (None, False)
+
+
+def test_scan_vcf_genotypes_samples(edge_case_vcf, tmp_path):
+    s2 = scan_vcf_genotypes(edge_case_vcf, samples=["S2"], format_fields=["GQ", "AD"], carriers_only=False).collect()
+    all_samples = scan_vcf_genotypes(edge_case_vcf, format_fields=["GQ", "AD"], carriers_only=False).collect()
+    assert s2.equals(all_samples.filter(pl.col("sample") == "S2"))
+
+    # polars-bio returns the FORMAT fields of a single-sample VCF as columns instead of a struct
+    lines = [line.split("\t") for line in EDGE_CASE_VCF.splitlines()]
+    single_sample_vcf = tmp_path / "single_sample.vcf"
+    single_sample_vcf.write_text("".join("\t".join(line[:9] + line[10:11]) + "\n" for line in lines))
+    single = scan_vcf_genotypes(str(single_sample_vcf), format_fields=["GQ", "AD"], carriers_only=False).collect()
+    assert single.equals(s2)
+
+
+def test_scan_vcf_genotypes_without_samples(tmp_path):
+    lines = [line.split("\t") for line in EDGE_CASE_VCF.splitlines() if not line.startswith("##FORMAT")]
+    sites_only_vcf = tmp_path / "sites_only.vcf"
+    sites_only_vcf.write_text("".join("\t".join(line[:8]) + "\n" for line in lines))
+    with pytest.raises(ValueError, match="no samples"):
+        scan_vcf_genotypes(str(sites_only_vcf))

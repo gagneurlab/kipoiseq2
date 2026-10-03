@@ -29,7 +29,7 @@ dependencies = [
 vcf = [
     "cyvcf2>=0.11.0",
 ]
-# scan_vcf_variants, SingleVariantMatcher and MultiVariantsMatcher
+# scan_vcf_variants, scan_vcf_genotypes, SingleVariantMatcher and MultiVariantsMatcher
 ranges = [
     "polars>=1.37.1",
     "polars-bio>=0.31",
