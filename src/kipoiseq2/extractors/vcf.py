@@ -55,7 +55,7 @@ def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
     # polars-bio joins the ALT alleles of a record with "|"
     alts = pl.col("alt").str.split("|")
     start = pl.col("pos") - 1
-    return (
+    variants = (
         scan.with_columns(
             pos=pl.col("start").cast(pl.Int64) + int(zero_based),
             alt=alts,
@@ -66,6 +66,9 @@ def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
         .with_columns(start=start, end=start + pl.col("ref").str.len_chars())
         .select("chrom", "start", "end", "pos", "id", "ref", "alt", "allele_idx", "qual", "filter", *fields)
     )
+    # start and end are 0-based for any use_zero_based, and polars-bio range operations read this metadata
+    variants.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
+    return variants
 
 
 def scan_vcf_genotypes(

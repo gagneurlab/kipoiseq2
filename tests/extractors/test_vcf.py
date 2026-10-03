@@ -90,8 +90,19 @@ def test_scan_vcf_variants_columns():
             "DP": pl.Int32,
         }
     )
+
+
+def test_scan_vcf_variants_zero_based(edge_case_vcf):
     # start and end do not depend on the coordinate system of polars-bio
-    assert scan_vcf_variants(vcf_file, use_zero_based=False).collect().equals(scan_vcf_variants(vcf_file).collect())
+    variants = scan_vcf_variants(vcf_file, use_zero_based=False)
+    assert variants.collect().equals(scan_vcf_variants(vcf_file).collect())
+    assert variants.collect().select("start", "end", "pos").row(0) == (3, 4, 4)
+    # polars-bio range operations read the coordinate system from the metadata
+    assert variants.config_meta.get_metadata()["coordinate_system_zero_based"] is True
+    for carriers_only in (True, False):
+        genotypes = scan_vcf_genotypes(edge_case_vcf, carriers_only=carriers_only, use_zero_based=False)
+        assert genotypes.config_meta.get_metadata()["coordinate_system_zero_based"] is True
+        assert genotypes.collect().select("start", "end", "pos").row(0) == (9, 10, 10)
 
 
 @pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants])
