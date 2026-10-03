@@ -6,9 +6,6 @@ Tests to perform:
 - make sure the immutable objects are really immutable
 - str() and from_str
 - =, hashable
--
-# VCF
-- from cyvcf2
 
 # Interval
 - validation of the interval
@@ -16,7 +13,6 @@ Tests to perform:
 - shift, swapt_strand, trim, etc
 """
 
-import cyvcf2
 import pytest
 
 from kipoiseq2.dataclasses import Interval, Variant
@@ -68,13 +64,6 @@ def test_variant():
     v.source = 2
 
     assert isinstance(Variant("chr1", "10", "C", "T").pos, int)
-
-    # from cyvcf2
-    vcf = cyvcf2.VCF("tests/data/test.vcf.gz")
-    cv = list(vcf)[0]
-
-    v2 = Variant.from_cyvcf(cv)
-    assert isinstance(v2.source, cyvcf2.Variant)
 
 
 def test_interval():

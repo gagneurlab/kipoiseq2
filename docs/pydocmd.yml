@@ -24,7 +24,6 @@ generate:
   - extractors.md:
     - kipoiseq2.extractors.base+
     - kipoiseq2.extractors.vcf+
-    - kipoiseq2.extractors.vcf_query+
     - kipoiseq2.extractors.vcf_seq+
     - kipoiseq2.extractors.vcf_matching+
   - transforms/functional.md:

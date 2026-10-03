@@ -1,17 +1,12 @@
-import abc
 import math
 import warnings
 from dataclasses import dataclass
 from typing import Optional
 
 from kipoiseq2.dataclasses import Interval
-from kipoiseq2.extractors import (
-    BaseExtractor,
-    FastaStringExtractor,
-    MultiSampleVCF,
-)
+from kipoiseq2.extractors import BaseExtractor, FastaStringExtractor
 
-__all__ = ["VariantSeqExtractor", "SingleVariantVCFSeqExtractor", "SingleSeqVCFSeqExtractor"]
+__all__ = ["VariantSeqExtractor"]
 
 # IUPAC complement, the same table as pyfaidx.complement. Other characters
 # are deleted, so a length change reveals them.
@@ -158,7 +153,7 @@ class VariantSeqExtractor(BaseExtractor):
         Args:
             interval: Interval, the region of interest from
                 which to query the sequence. 0-based
-            variants: List[cyvcf2.Variant]: variants overlapping the `interval`.
+            variants: List[Variant]: variants overlapping the `interval`.
                 can also be indels. 1-based
             anchor: absolution position w.r.t. the interval start. (0-based).
                 E.g. for an interval of `chr1:10-20` the anchor of 10 denotes
@@ -337,47 +332,3 @@ class VariantSeqExtractor(BaseExtractor):
                 raise ValueError("padding should be set to True, if the sequence can't extend to the fixed length")
 
         return down_str, up_str
-
-
-class _BaseVCFSeqExtractor(BaseExtractor, metaclass=abc.ABCMeta):
-    """
-    Base class to fetch sequence in which variants applied based
-    on given vcf file.
-    """
-
-    def __init__(self, fasta_file, vcf_file):
-        """
-        Args:
-          fasta_file: path to the fasta file (can be gzipped)
-          vcf_file: path to the fasta file (need be bgzipped and indexed)
-        """
-        self.fasta_file = fasta_file
-        self.vcf_file = vcf_file
-        self.variant_extractor = VariantSeqExtractor(fasta_file)
-        self.vcf = MultiSampleVCF(vcf_file)
-
-    @abc.abstractmethod
-    def extract(self, interval: Interval, *args, **kwargs) -> str:
-        raise NotImplementedError()
-
-
-class SingleVariantVCFSeqExtractor(_BaseVCFSeqExtractor):
-    """
-    Fetch list of sequence in which each variant applied based
-    on given vcf file.
-    """
-
-    def extract(self, interval, anchor=None, sample_id=None, fixed_len=True):
-        for variant in self.vcf.fetch_variants(interval, sample_id):
-            yield self.variant_extractor.extract(interval, variants=[variant], anchor=anchor, fixed_len=fixed_len)
-
-
-class SingleSeqVCFSeqExtractor(_BaseVCFSeqExtractor):
-    """
-    Fetch sequence in which all variant applied based on given vcf file.
-    """
-
-    def extract(self, interval, anchor=None, sample_id=None, fixed_len=True):
-        return self.variant_extractor.extract(
-            interval, variants=self.vcf.fetch_variants(interval, sample_id), anchor=anchor, fixed_len=fixed_len
-        )

@@ -25,11 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# MultiSampleVCF and the VCF-based extractors
-vcf = [
-    "cyvcf2>=0.11.0",
-]
-# scan_vcf_variants, scan_vcf_genotypes, SingleVariantMatcher and MultiVariantsMatcher
+# VCF reading (scan_vcf_variants, scan_vcf_genotypes) and variant matching
 ranges = [
     "polars>=1.37.1",
     "polars-bio>=0.31",
@@ -83,7 +79,7 @@ isolated_build = true
 runner = "uv-venv-lock-runner"
 description = "run unit tests"
 dependency_groups = ["test"]
-extras = ["vcf", "ranges"]
+extras = ["ranges"]
 commands = [["pytest", { replace = "posargs", default = ["tests"], extend = true }]]
 
 [tool.tox.env."format-check"]
@@ -101,7 +97,7 @@ commands = [["ruff", "check", "."]]
 [tool.tox.env."typecheck"]
 runner = "uv-venv-lock-runner"
 dependency_groups = ["lint"]
-extras = ["vcf", "ranges"]
+extras = ["ranges"]
 commands = [["mypy", "src/kipoiseq2"]]
 
 [tool.mypy]

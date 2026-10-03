@@ -1,13 +1,10 @@
 import pytest
-from conftest import sample_5kb_fasta_file, vcf_file
-from cyvcf2 import VCF
+from conftest import sample_5kb_fasta_file
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors import FastaStringExtractor
 from kipoiseq2.extractors.vcf_seq import (
     IntervalSeqBuilder,
-    SingleSeqVCFSeqExtractor,
-    SingleVariantVCFSeqExtractor,
     Subsequence,
     VariantSeqExtractor,
     reverse_complement,
@@ -105,7 +102,8 @@ def test__split_overlapping(variant_seq_extractor):
 
 
 def test_extract(variant_seq_extractor):
-    variants = [Variant.from_cyvcf(v) for v in VCF(vcf_file)]
+    # the variants of tests/data/test.vcf.gz
+    variants = [Variant("chr1", 4, "T", "C"), Variant("chr1", 5, "A", "GA"), Variant("chr1", 25, "AACG", "GA")]
 
     interval = Interval("chr1", 0, 30)
 
@@ -202,26 +200,3 @@ def test_extract_interval_beyond_chromosome_end(variant_seq_extractor):
     interval = Interval("chr1", CHROM_LEN - 5, CHROM_LEN + 5)
     seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN, chrom_len=CHROM_LEN, is_padding=True)
     assert seq == "ACGTANNNNN"
-
-
-@pytest.fixture
-def single_variant_vcf_seq_extractor():
-    return SingleVariantVCFSeqExtractor(fasta_file, vcf_file)
-
-
-def test_single_variant_vcf_seq_extract(single_variant_vcf_seq_extractor):
-    interval = Interval("chr1", 2, 9)
-    seqs = single_variant_vcf_seq_extractor.extract(interval, anchor=3)
-    assert next(seqs) == "GCAACGT"
-    assert next(seqs) == "GTGAACG"
-
-
-@pytest.fixture
-def single_seq_vcf_seq_extractor():
-    return SingleSeqVCFSeqExtractor(fasta_file, vcf_file)
-
-
-def test_single_seq_vcf_seq_extract(single_seq_vcf_seq_extractor):
-    interval = Interval("chr1", 2, 9)
-    seq = single_seq_vcf_seq_extractor.extract(interval, anchor=3)
-    assert seq == "GCGAACG"

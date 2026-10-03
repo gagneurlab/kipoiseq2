@@ -33,7 +33,7 @@ class Variant:
           filter: FILTER field in the VCF
           info: INFO field in the VCF
           source: reference to the original source object from which this
-            Variant object was created (e.g. `cyvcf2.Variant()` class)
+            Variant object was created
         """
         # main 4 attributes
         # these should be immutable by default to not
@@ -84,43 +84,6 @@ class Variant:
         This equals the 1-based position of the last REF base.
         """
         return self.start + len(self.ref)
-
-    @classmethod
-    def from_cyvcf(cls, obj):
-        if len(obj.ALT) > 1:
-            # TODO - do a proper warning
-            print("WARNING: len(obj.ALT) > 1")
-        # if there is a deletion
-        # empty string
-        if len(obj.ALT) == 0:
-            obj.ALT = [""]
-
-        return cls(
-            chrom=obj.CHROM,
-            pos=obj.POS,
-            ref=obj.REF,
-            alt=obj.ALT[0],  # note. we are using a single one
-            id=obj.ID,
-            qual=obj.QUAL,
-            filter=obj.FILTER,
-            info=dict(obj.INFO),
-            source=obj,
-        )
-
-    @classmethod
-    def from_cyvcf_and_given_alt(cls, obj, alt):
-
-        return cls(
-            chrom=obj.CHROM,
-            pos=obj.POS,
-            ref=obj.REF,
-            alt=alt,
-            id=obj.ID,
-            qual=obj.QUAL,
-            filter=obj.FILTER,
-            info=dict(obj.INFO),
-            source=obj,
-        )
 
     def __eq__(self, obj):
         return self.chrom == obj.chrom and self.pos == obj.pos and self.ref == obj.ref and self.alt == obj.alt

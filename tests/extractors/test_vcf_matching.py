@@ -3,7 +3,6 @@ import pytest
 from conftest import test_with_multiple_variants, vcf_file
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors.vcf import MultiSampleVCF
 from kipoiseq2.extractors.vcf_matching import (
     BaseVariantMatcher,
     MultiVariantsMatcher,
@@ -33,10 +32,8 @@ interval_frame = pl.DataFrame(
 
 
 def test_variants_to_polars():
-    vcf = MultiSampleVCF(vcf_file)
-    vcf_variants = list(vcf)
-    df = variants_to_polars(vcf_variants)
-    assert df.height == len(vcf_variants)
+    df = variants_to_polars(variants)
+    assert df.height == len(variants)
     assert df.row(0, named=True) == {"chrom": "chr1", "start": 3, "end": 4, "pos": 4, "ref": "T", "alt": "C"}
     # the deletion AACG>GA at POS 25 covers the 0-based bases 24 to 27
     assert df.row(2, named=True)["start"] == 24
@@ -328,21 +325,45 @@ CYVCF2_INTERVALS = [
 ]
 
 
-def _cyvcf2_pairs(path):
-    """(interval, variant) for each overlapping pair of CYVCF2_INTERVALS and the Variants of MultiSampleVCF."""
-    return [
-        (interval, str(v))
-        for v in MultiSampleVCF(path)
-        for interval in CYVCF2_INTERVALS
-        if v.chrom == interval.chrom and v.start < interval.end and interval.start < v.end
-    ]
+# The overlapping pairs of CYVCF2_INTERVALS and the Variants of the cyvcf2-based MultiSampleVCF,
+# in VCF order and per variant in the order of the intervals: the index into CYVCF2_INTERVALS and the variant.
+CYVCF2_PAIRS = {
+    vcf_file: [
+        (0, "chr1:4:T>C"),
+        (0, "chr1:5:A>GA"),
+        (1, "chr1:25:AACG>GA"),
+        (2, "chr1:25:AACG>GA"),
+    ],
+    test_with_multiple_variants: [
+        (0, "chr1:4:T>C"),
+        (0, "chr1:4:T>A"),
+        (0, "chr1:4:T>G"),
+        (0, "chr1:5:A>GA"),
+        (0, "chr1:5:A>"),
+        (0, "chr1:12:T>"),
+        (1, "chr1:12:T>"),
+        (1, "chr1:25:AACG>GA"),
+        (2, "chr1:25:AACG>GA"),
+    ],
+    "edge_case_vcf": [
+        (0, "chr1:10:A>C"),
+        (1, "chr1:10:A>C"),
+        (0, "chr1:10:A>G"),
+        (1, "chr1:10:A>G"),
+        (1, "chr1:20:ACGT><DEL>"),
+        (1, "chr1:30:T>"),
+        (2, "chr1:30:T>"),
+        (3, "chr2:5:TA>T"),
+        (3, "chr2:5:TA>TAA"),
+    ],
+}
 
 
 @pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants, "edge_case_vcf"])
 def test_SingleVariantMatcher_equals_cyvcf2(path, request):
+    expected = [(CYVCF2_INTERVALS[i], variant) for i, variant in CYVCF2_PAIRS[path]]
     if path == "edge_case_vcf":
         path = request.getfixturevalue(path)
-    expected = _cyvcf2_pairs(path)
     matcher = SingleVariantMatcher(path, intervals=CYVCF2_INTERVALS, variant_batch_size=2)
     assert [(interval, str(variant)) for interval, variant in matcher] == expected
     pairs = matcher.pairs()

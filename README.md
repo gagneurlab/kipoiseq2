@@ -6,17 +6,16 @@ Sequence extractors and transforms for DNA sequence-based models.
 kipoiseq2 extracts reference and variant sequences from FASTA and VCF files and encodes them for model input, e.g. as one-hot arrays.
 
 kipoiseq2 is the successor of [kipoiseq](https://github.com/kipoi/kipoiseq) without the Kipoi model zoo dataloaders (`kipoiseq.dataloaders`) and without the kipoi dependencies.
-Its sequence and VCF extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
+Its sequence extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
+kipoiseq2 reads VCF files as polars tables with polars-bio instead of cyvcf2, see [Migrating from kipoiseq](#migrating-from-kipoiseq).
 
 ## Installation
 
 Requires Python >= 3.12.
 
 ```bash
-pip install kipoiseq2               # FASTA extractors and transforms (numpy, pyfaidx)
-pip install 'kipoiseq2[vcf]'        # + MultiSampleVCF and the VCF-based extractors (cyvcf2)
-pip install 'kipoiseq2[ranges]'     # + scan_vcf_variants, scan_vcf_genotypes and the variant matchers (polars, polars-bio)
-pip install 'kipoiseq2[vcf,ranges]' # everything
+pip install kipoiseq2           # FASTA extractors and transforms (numpy, pyfaidx)
+pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes and the variant matchers (polars, polars-bio)
 ```
 
 kipoiseq2 does not depend on pandas or pyranges.
@@ -25,7 +24,7 @@ kipoiseq2 does not depend on pandas or pyranges.
 
 ```python
 from kipoiseq2 import Interval, Variant
-from kipoiseq2.extractors import FastaStringExtractor, MultiSampleVCF, VariantSeqExtractor
+from kipoiseq2.extractors import FastaStringExtractor, VariantSeqExtractor
 from kipoiseq2.transforms.functional import one_hot_dna
 
 interval = Interval("chr1", 10, 20, strand="+")
@@ -37,7 +36,7 @@ one_hot = one_hot_dna(seq)  # array of shape (10, 4)
 
 # sequence with variants applied, anchored at the interval start
 variants = [Variant("chr1", 15, "A", "T")]
-# or all variants of a VCF file in the interval: MultiSampleVCF("variants.vcf.gz").fetch_variants(interval)
+# for the variants of a VCF file in each interval, see MultiVariantsMatcher below
 alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10)
 ```
 
@@ -118,13 +117,25 @@ kipoiseq2 does not install `kipoi`, `kipoi-utils`, `kipoi-conda` or `gffutils`, 
 kipoiseq2 also drops these parts of kipoiseq:
 - the GTF, protein and UTR extractors (`kipoiseq.extractors.gtf`, `protein` and `multi_interval`) and `VariantCombinator`
 - `Interval.from_pybedtools` and `Interval.to_pybedtools`
-- the `progress` argument of `MultiSampleVCF.query_variants`, `MultiSampleVCF.query_all` and `VariantIntervalQueryable`
+
+kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra is gone and the `ranges` extra covers VCF reading:
+- `MultiSampleVCF` becomes `scan_vcf_variants`, with one row per ALT allele, or `scan_vcf_genotypes`, with one row per ALT allele and sample.
+  Both return a polars LazyFrame instead of Variant objects.
+- `query_all().filter(lambda ...)` becomes a polars filter, e.g. `scan_vcf_variants(path).filter(pl.col("alt").str.len_chars() == 1)`.
+  For QUAL and FILTER, filter the frame of `polars_bio.scan_vcf(path)`.
+- `fetch_variants`, `query_variants`, `get_variant` and `get_variants` become `SingleVariantMatcher` or `MultiVariantsMatcher`, or a filter or join on `scan_vcf_variants(path)`.
+- `get_samples`, `has_variant` and `to_sample_csv` become `scan_vcf_genotypes(path, format_fields=[...])`, and `.sink_csv(path)` writes the CSV.
+  The carrier check works per ALT allele, not per record: a sample with GT 0/2 carries the second ALT allele only.
+- `to_vcf` becomes `polars_bio.sink_vcf`, e.g. `pb.sink_vcf(pb.scan_vcf(path).filter(pl.col("qual") > 10), out_path)`.
+- `VariantIntervalQueryable` and the query classes of `kipoiseq.extractors.vcf_query` are gone: filter the polars frames instead.
+- `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with a matcher, and apply them with `VariantSeqExtractor`.
+- `Variant.from_cyvcf` and `Variant.from_cyvcf_and_given_alt` are gone. `Variant.source` stays as a slot for any source object.
 
 The matchers use polars instead of pyranges:
 - `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`. `intervals` also takes a sequence of Interval objects.
   For a PyRanges object `pr`, pass `intervals=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
 - `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `intervals`.
-- `variant_fetcher` is gone. Pass the path of a VCF file as `vcf_file`, or a polars frame or Variant objects as `variants`.
+- `variant_fetcher` and `VariantFetcher` are gone. Pass the path of a VCF file as `vcf_file`, or a polars frame or Variant objects as `variants`.
   Arguments after `variants` are keyword-only.
 - `SingleVariantMatcher` yields the pairs in VCF order instead of grouped by chromosome and strand.
   With a sequence of Interval objects as `intervals`, it yields these objects, so they keep their name and attrs.
