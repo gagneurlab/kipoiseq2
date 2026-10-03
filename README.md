@@ -74,6 +74,8 @@ carriers.sink_csv("carriers.csv")
 
 `SingleVariantMatcher` finds every interval-variant pair with one [polars-bio](https://biodatageeks.org/polars-bio/) overlap join.
 A variant matches an interval if `variant.start < interval.end` and `interval.start < variant.end`.
+Give the variants either as `vcf_file`, the path of a VCF file that `scan_vcf_variants` reads, or as `variants`.
+`variants` takes a polars DataFrame or LazyFrame with the columns `chrom`, `pos`, `ref` and `alt`, or Variant objects.
 
 ```python
 import polars as pl
@@ -86,13 +88,22 @@ matcher = SingleVariantMatcher("variants.vcf.gz", intervals=exons, interval_attr
 # all pairs as one polars DataFrame: interval columns, interval_idx, variant_* columns, variant_idx
 pairs = matcher.pairs()
 
-# or iterate (Interval, Variant) pairs; interval.attrs holds exon_id, variant.source the cyvcf2 record
-for interval, variant in SingleVariantMatcher("variants.vcf.gz", intervals=exons, interval_attrs=["exon_id"]):
+# for a large VCF, write the pairs to a file, or process them in batches of variant_batch_size variants
+matcher.scan_pairs().sink_parquet("pairs.parquet")
+for batch in matcher.iter_batches():
+    ...
+
+# or iterate (Interval, Variant) pairs; interval.attrs holds exon_id
+for interval, variant in matcher:
     ...
 ```
 
-Iteration runs one overlap join per batch of `variant_batch_size` variants (default 10000), so the Variant objects of a large VCF are not all held in memory.
+`scan_pairs()` streams the VCF through the overlap join.
+`iter_batches()` and iteration run one overlap join per batch of `variant_batch_size` variants (default 10000).
+With a VCF file, the peak memory of `scan_pairs().sink_parquet(...)` and `iter_batches()` does not grow with the size of the VCF.
+`pairs()` holds all pairs in memory.
 The pairs come in VCF order, and per variant in the order of the intervals.
+`MultiVariantsMatcher` yields each interval with an iterator over its variants, also if the interval has no variants.
 
 More examples:
 - The tests in [tests/](tests/) show the usage of every extractor and transform.
@@ -113,11 +124,17 @@ The matchers use polars instead of pyranges:
 - `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`. `intervals` also takes a sequence of Interval objects.
   For a PyRanges object `pr`, pass `intervals=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
 - `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `intervals`.
-- Arguments after `variant_fetcher` are keyword-only.
+- `variant_fetcher` is gone. Pass the path of a VCF file as `vcf_file`, or a polars frame or Variant objects as `variants`.
+  Arguments after `variants` are keyword-only.
 - `SingleVariantMatcher` yields the pairs in VCF order instead of grouped by chromosome and strand.
   With a sequence of Interval objects as `intervals`, it yields these objects, so they keep their name and attrs.
-- `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by `pairs()` and `iter_batches()`, which return polars DataFrames.
-- `variants_to_pyranges`, `intervals_to_pyranges` and `pyranges_to_intervals` are replaced by `variants_to_polars` and `intervals_to_polars`; `PyrangesVariantFetcher` is now `VariantListFetcher`.
+- With a VCF file or a polars frame as the variant source, the matchers yield new Variant objects with chrom, pos, ref and alt, and without `source`.
+  For the genotypes of the samples, use `scan_vcf_genotypes`.
+- `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by `pairs()`, `scan_pairs()` and `iter_batches()`.
+  `pairs()` returns all pairs as a polars DataFrame, `scan_pairs()` as a LazyFrame, and `iter_batches()` yields one DataFrame per batch of variants.
+- `MultiVariantsMatcher` finds the variants of all intervals with one overlap join instead of one VCF query per interval.
+- `variants_to_pyranges`, `intervals_to_pyranges` and `pyranges_to_intervals` are replaced by `variants_to_polars` and `intervals_to_polars`.
+  `PyrangesVariantFetcher` is gone: pass the variants as `variants`.
 
 ## Contributing
 

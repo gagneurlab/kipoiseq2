@@ -1,8 +1,6 @@
-from typing import Iterable, Iterator, List, Union
-
 import polars as pl
 import pytest
-from conftest import vcf_file
+from conftest import test_with_multiple_variants, vcf_file
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors.vcf import MultiSampleVCF
@@ -10,8 +8,6 @@ from kipoiseq2.extractors.vcf_matching import (
     BaseVariantMatcher,
     MultiVariantsMatcher,
     SingleVariantMatcher,
-    VariantFetcher,
-    VariantListFetcher,
     intervals_to_polars,
     overlap_variants,
     variants_to_polars,
@@ -34,33 +30,6 @@ interval_frame = pl.DataFrame(
         "gene_id": ["g1", "g2", "g3", "g4"],
     }
 )
-
-
-class VariantFetcherProxy(VariantFetcher):
-    def __init__(self, variant_fetcher: VariantFetcher):
-        self.variant_fetcher = variant_fetcher
-
-    def fetch_variants(self, interval: Union[Interval, Iterable[Interval]]) -> Iterator[Variant]:
-        yield from self.variant_fetcher.fetch_variants(interval)
-
-    def batch_iter(self, batch_size=10000) -> Iterator[List[Variant]]:
-        yield from self.variant_fetcher.batch_iter(batch_size)
-
-    def __iter__(self) -> Iterator[Variant]:
-        yield from self.variant_fetcher
-
-
-# make sure that kipoiseq2 only uses the VariantFetcher API
-read_variants_fn = BaseVariantMatcher._read_variants
-
-
-@staticmethod
-def proxy_fn(*args, **kwargs):
-    vf = VariantFetcherProxy(read_variants_fn(*args, **kwargs))
-    return vf
-
-
-BaseVariantMatcher._read_variants = proxy_fn
 
 
 def test_variants_to_polars():
@@ -168,9 +137,7 @@ def test_SingleVariantMatcher__iter__():
 
     assert list(SingleVariantMatcher(vcf_file, intervals=interval_frame)) == expected
     assert list(SingleVariantMatcher(variants=variants, intervals=interval_frame)) == expected
-    assert (
-        list(SingleVariantMatcher(variant_fetcher=VariantListFetcher(variants), intervals=interval_frame)) == expected
-    )
+    assert list(SingleVariantMatcher(variants=variants_to_polars(variants), intervals=interval_frame)) == expected
     assert list(SingleVariantMatcher(vcf_file, intervals=inters)) == expected
     # one variant per overlap join gives the same pairs
     assert list(SingleVariantMatcher(vcf_file, intervals=interval_frame, variant_batch_size=1)) == expected
@@ -192,15 +159,20 @@ def test_SingleVariantMatcher_interval_attrs():
     assert [i.attrs for i, _ in pairs] == [{"gene_id": "g1"}, {"gene_id": "g1"}, {"gene_id": "g2"}, {"gene_id": "g3"}]
 
 
-def test_SingleVariantMatcher_yields_given_intervals():
+def test_SingleVariantMatcher_yields_given_objects():
     named = [Interval("chr1", 1, 10, name="a", attrs={"x": 1})]
-    ((interval, variant), *_) = list(SingleVariantMatcher(vcf_file, intervals=named))
+    ((interval, variant), *_) = list(SingleVariantMatcher(variants=variants, intervals=named))
     assert interval is named[0]
-    assert variant.source is not None  # the cyvcf2 record, e.g. for genotypes
+    assert variant is variants[0]
+
+    # a table gives new Variant objects
+    ((_, variant), *_) = list(SingleVariantMatcher(vcf_file, intervals=named))
+    assert variant == variants[0]
+    assert variant.source is None
 
 
 def test_SingleVariantMatcher_pairs():
-    matcher = SingleVariantMatcher(vcf_file, intervals=interval_frame, interval_attrs=["gene_id"], variant_batch_size=2)
+    matcher = SingleVariantMatcher(vcf_file, intervals=interval_frame, interval_attrs=["gene_id"])
     pairs = matcher.pairs()
     assert pairs.select("gene_id", "variant_pos", "variant_ref", "variant_alt").rows() == [
         ("g1", 4, "T", "C"),
@@ -208,15 +180,61 @@ def test_SingleVariantMatcher_pairs():
         ("g2", 25, "AACG", "GA"),
         ("g3", 25, "AACG", "GA"),
     ]
-    # variant_idx counts over all batches
     assert pairs["variant_idx"].to_list() == [0, 1, 2, 2]
+    # the columns of scan_vcf_variants pass through
+    assert pairs["variant_allele_idx"].to_list() == [1, 1, 1, 1]
 
 
-def test_SingleVariantMatcher_iter_batches():
-    matcher = SingleVariantMatcher(variants=variants, intervals=interval_frame, variant_batch_size=2)
+@pytest.mark.parametrize(
+    "source",
+    [{"vcf_file": vcf_file}, {"variants": variants}, {"variants": variants_to_polars(variants).lazy()}],
+    ids=["vcf_file", "objects", "frame"],
+)
+def test_SingleVariantMatcher_iter_batches(source):
+    matcher = SingleVariantMatcher(**source, intervals=interval_frame, variant_batch_size=2)
     batches = list(matcher.iter_batches())
-    assert [len(b) for b, _ in batches] == [2, 1]
-    assert [p["variant_idx"].to_list() for _, p in batches] == [[0, 1], [0, 0]]
+    # variant_idx counts over all batches
+    assert [b["variant_idx"].to_list() for b in batches] == [[0, 1], [2, 2]]
+    assert pl.concat(batches).equals(matcher.pairs())
+
+
+def test_SingleVariantMatcher_scan_pairs():
+    matcher = SingleVariantMatcher(vcf_file, intervals=interval_frame)
+    lazy_pairs = matcher.scan_pairs()
+    assert isinstance(lazy_pairs, pl.LazyFrame)
+    assert lazy_pairs.collect().sort(["variant_idx", "interval_idx"]).equals(matcher.pairs())
+
+
+def test_BaseVariantMatcher_variant_sources():
+    with pytest.raises(ValueError, match="exactly one"):
+        SingleVariantMatcher(intervals=intervals)
+    with pytest.raises(ValueError, match="exactly one"):
+        SingleVariantMatcher(vcf_file, variants=variants, intervals=intervals)
+
+
+def test_SingleVariantMatcher_variant_frame():
+    frame = pl.DataFrame(
+        {
+            "chrom": ["chr1", "chr1", "chr1"],
+            "pos": [4, 5, 25],
+            "ref": ["T", "A", "AACG"],
+            "alt": ["C", "GA", "GA"],
+            "variant_id": ["v1", "v2", "v3"],
+            # start and end are recomputed from pos and ref
+            "start": [0, 0, 0],
+        }
+    )
+    pairs = SingleVariantMatcher(variants=frame, intervals=interval_frame).pairs()
+    assert pairs.select("variant_start", "variant_end", "variant_variant_id").rows() == [
+        (3, 4, "v1"),
+        (4, 5, "v2"),
+        (24, 28, "v3"),
+        (24, 28, "v3"),
+    ]
+    assert pairs.equals(SingleVariantMatcher(variants=frame.lazy(), intervals=interval_frame).pairs())
+
+    with pytest.raises(ValueError, match="alt"):
+        SingleVariantMatcher(variants=frame.drop("alt"), intervals=interval_frame)
 
 
 def test_MultiVariantMatcher__iter__():
@@ -244,6 +262,9 @@ def test_MultiVariantMatcher__iter__():
     assert pairs[1][0] == intervals[1]
     assert list(pairs[1][1]) == [variants[2]]
     assert list(pairs[2][1]) == [variants[2]]
+    # the interval on chr10 has no variants
+    assert pairs[3][0] == intervals[2]
+    assert list(pairs[3][1]) == []
 
 
 # Interval chr1:[10, 20) is 0-based, half-open: it covers the 1-based positions 11 to 20.
@@ -273,14 +294,62 @@ BOUNDARY_CASES = [
 
 @pytest.mark.parametrize("variant, overlaps", [c[1:] for c in BOUNDARY_CASES], ids=[c[0] for c in BOUNDARY_CASES])
 def test_SingleVariantMatcher_boundaries(variant, overlaps):
-    pairs = list(SingleVariantMatcher(variants=[variant], intervals=[BOUNDARY_INTERVAL]))
-    assert pairs == ([(BOUNDARY_INTERVAL, variant)] if overlaps else [])
-    # the list fetcher of MultiVariantsMatcher uses the same rule
-    ((_, fetched),) = list(MultiVariantsMatcher(variants=[variant], intervals=[BOUNDARY_INTERVAL]))
-    assert list(fetched) == ([variant] if overlaps else [])
+    expected = [(BOUNDARY_INTERVAL, variant)] if overlaps else []
+    assert list(SingleVariantMatcher(variants=[variant], intervals=[BOUNDARY_INTERVAL])) == expected
+    frame = pl.DataFrame({"chrom": [variant.chrom], "pos": [variant.pos], "ref": [variant.ref], "alt": [variant.alt]})
+    assert list(SingleVariantMatcher(variants=frame, intervals=[BOUNDARY_INTERVAL])) == expected
+    ((_, matched),) = list(MultiVariantsMatcher(variants=[variant], intervals=[BOUNDARY_INTERVAL]))
+    assert list(matched) == ([variant] if overlaps else [])
 
 
 def test_SingleVariantMatcher_boundaries_in_one_batch():
     all_variants = [v for _, v, _ in BOUNDARY_CASES]
     pairs = list(SingleVariantMatcher(variants=all_variants, intervals=[BOUNDARY_INTERVAL]))
     assert [v for _, v in pairs] == [v for _, v, overlaps in BOUNDARY_CASES if overlaps]
+
+
+def test_SingleVariantMatcher_boundaries_vcf_file(tmp_path):
+    # a VCF record cannot have an empty REF
+    cases = [(v, overlaps) for _, v, overlaps in BOUNDARY_CASES if v.ref]
+    path = tmp_path / "boundaries.vcf"
+    records = ["\t".join([v.chrom, str(v.pos), ".", v.ref, v.alt, ".", ".", "."]) for v, _ in cases]
+    path.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n" + "\n".join(records) + "\n")
+    pairs = list(SingleVariantMatcher(str(path), intervals=[BOUNDARY_INTERVAL]))
+    assert [v for _, v in pairs] == [v for v, overlaps in cases if overlaps]
+
+
+# Intervals around the variants of the test VCFs, including one without variants
+CYVCF2_INTERVALS = [
+    Interval("chr1", 0, 15, strand="+"),
+    Interval("chr1", 9, 30, strand="-"),
+    Interval("chr1", 25, 50),
+    Interval("chr2", 0, 10),
+    Interval("chr3", 0, 10),
+]
+
+
+def _cyvcf2_pairs(path):
+    """(interval, variant) for each overlapping pair of CYVCF2_INTERVALS and the Variants of MultiSampleVCF."""
+    return [
+        (interval, str(v))
+        for v in MultiSampleVCF(path)
+        for interval in CYVCF2_INTERVALS
+        if v.chrom == interval.chrom and v.start < interval.end and interval.start < v.end
+    ]
+
+
+@pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants, "edge_case_vcf"])
+def test_SingleVariantMatcher_equals_cyvcf2(path, request):
+    if path == "edge_case_vcf":
+        path = request.getfixturevalue(path)
+    expected = _cyvcf2_pairs(path)
+    matcher = SingleVariantMatcher(path, intervals=CYVCF2_INTERVALS, variant_batch_size=2)
+    assert [(interval, str(variant)) for interval, variant in matcher] == expected
+    pairs = matcher.pairs()
+    actual = [
+        (CYVCF2_INTERVALS[i], "{}:{}:{}>{}".format(chrom, pos, ref, alt))
+        for i, chrom, pos, ref, alt in pairs.select(
+            "interval_idx", "chrom", "variant_pos", "variant_ref", "variant_alt"
+        ).iter_rows()
+    ]
+    assert actual == expected

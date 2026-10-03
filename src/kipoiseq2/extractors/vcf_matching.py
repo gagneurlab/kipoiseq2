@@ -1,20 +1,21 @@
 """Match variants with the intervals they overlap.
 
-`SingleVariantMatcher` finds the interval-variant pairs with a polars-bio
-overlap join. Intervals and variants use 0-based, half-open coordinates:
-a variant overlaps an interval if `variant.start < interval.end` and
-`interval.start < variant.end`, with `variant.start = pos - 1` and
-`variant.end = variant.start + len(ref)`.
+`SingleVariantMatcher` and `MultiVariantsMatcher` find the interval-variant
+pairs with one polars-bio overlap join. The variants come from a VCF file,
+a polars DataFrame or LazyFrame, or Variant objects. Intervals and variants
+use 0-based, half-open coordinates: a variant overlaps an interval if
+`variant.start < interval.end` and `interval.start < variant.end`, with
+`variant.start = pos - 1` and `variant.end = variant.start + len(ref)`.
 
 The matchers need the `ranges` extra (polars and polars-bio).
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, cast
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.variant_source import VariantFetcher
 
 if TYPE_CHECKING:
     import polars as pl
@@ -23,7 +24,6 @@ __all__ = [
     "intervals_to_polars",
     "variants_to_polars",
     "overlap_variants",
-    "VariantListFetcher",
     "BaseVariantMatcher",
     "SingleVariantMatcher",
     "MultiVariantsMatcher",
@@ -150,24 +150,6 @@ def _overlap_lazy(intervals: pl.DataFrame, variants: Union[pl.DataFrame, pl.Lazy
     return joined.select(columns)
 
 
-class VariantListFetcher(VariantFetcher):
-    """Variant fetcher over Variant objects held in memory."""
-
-    def __init__(self, variants: Iterable[Variant]):
-        self.variants = list(variants)
-
-    def fetch_variants(self, interval: Union[Interval, Iterable[Interval]]) -> Iterator[Variant]:
-        """Yield the variants that overlap the interval(s), per interval in the given order."""
-        intervals = [interval] if isinstance(interval, Interval) else interval
-        for i in intervals:
-            for v in self.variants:
-                if v.chrom == i.chrom and v.start < i.end and i.start < v.end:
-                    yield v
-
-    def __iter__(self) -> Iterator[Variant]:
-        yield from self.variants
-
-
 class BaseVariantMatcher:
     """
     Base variant intervals matcher
@@ -176,23 +158,21 @@ class BaseVariantMatcher:
     def __init__(
         self,
         vcf_file: Optional[str] = None,
-        variants: Optional[Sequence[Variant]] = None,
-        variant_fetcher: Optional[VariantFetcher] = None,
+        variants: Union[pl.DataFrame, pl.LazyFrame, Iterable[Variant], None] = None,
         *,
         intervals: Union[pl.DataFrame, Iterable[Interval]],
         interval_attrs: Optional[Sequence[str]] = None,
-        vcf_lazy: bool = True,
         variant_batch_size: int = 10000,
     ):
         """
-        Give one source of variants (`vcf_file`, `variants` or
-        `variant_fetcher`) and the intervals.
+        Give one source of variants (`vcf_file` or `variants`) and the intervals.
 
         Args:
-          vcf_file: path of a VCF file, read with `MultiSampleVCF`
-            (needs the `vcf` extra).
-          variants: Variant objects.
-          variant_fetcher: a VariantFetcher, e.g. a `MultiSampleVCF`.
+          vcf_file: path of a VCF file, read with `scan_vcf_variants`.
+          variants: either a polars DataFrame or LazyFrame, or Variant
+            objects. A frame needs the columns chrom, pos (1-based), ref and
+            alt, with one ALT allele per row. Its other columns pass through
+            to the pairs.
           intervals: either a polars DataFrame with the columns chrom, start
             and end (0-based, half-open), an optional strand column and the
             columns in `interval_attrs`, or Interval objects (any iterable,
@@ -200,11 +180,11 @@ class BaseVariantMatcher:
             yield Interval objects as given, so they keep their name and attrs.
           interval_attrs: columns of the `intervals` DataFrame to copy into
             `Interval.attrs`. Not valid with Interval objects.
-          vcf_lazy: passed to `MultiSampleVCF` as `lazy`.
           variant_batch_size: number of variants per overlap join when
-            iterating over the pairs.
+            `SingleVariantMatcher` yields the pairs in batches or one by one.
         """
-        self.variant_fetcher = self._read_variants(vcf_file, variants, variant_fetcher, vcf_lazy)
+        self._variants: Optional[List[Variant]] = None
+        self._variant_frame = self._read_variants(vcf_file, variants)
         self.interval_attrs = list(interval_attrs or [])
         pl, _ = _import_polars()
         self._intervals: Optional[List[Interval]] = None
@@ -214,26 +194,34 @@ class BaseVariantMatcher:
         self._interval_frame = self._read_intervals(intervals, self.interval_attrs)
         self.variant_batch_size = variant_batch_size
 
-    @staticmethod
-    def _read_variants(
-        vcf_file=None,
-        variants=None,
-        variant_fetcher=None,
-        vcf_lazy: bool = True,
-    ) -> VariantFetcher:
+    def _read_variants(self, vcf_file=None, variants=None) -> pl.LazyFrame:
+        """Return the variants as a LazyFrame with chrom, start, end, pos, ref, alt and the other columns."""
+        pl, _ = _import_polars()
+        if (vcf_file is None) == (variants is None):
+            raise ValueError("Give exactly one of `vcf_file` and `variants`")
         if vcf_file is not None:
-            from kipoiseq2.extractors import MultiSampleVCF
+            from kipoiseq2.extractors.vcf import scan_vcf_variants
 
-            return MultiSampleVCF(vcf_file, lazy=vcf_lazy)
-        elif variant_fetcher is not None:
-            assert isinstance(variant_fetcher, VariantFetcher), "Wrong type of variant fetcher: %s" % type(
-                variant_fetcher
-            )
-            return variant_fetcher
-        elif variants is not None:
-            return VariantListFetcher(variants)
-        else:
-            raise ValueError("No source of variants was specified!")
+            return scan_vcf_variants(vcf_file)
+        if not isinstance(variants, (pl.DataFrame, pl.LazyFrame)):
+            # __iter__ yields these objects
+            self._variants = list(variants)
+            return variants_to_polars(self._variants).lazy()
+
+        columns = variants.collect_schema().names()
+        missing = [c for c in ("chrom", "pos", "ref", "alt") if c not in columns]
+        if missing:
+            raise ValueError("`variants` lacks the columns {}".format(missing))
+        start = pl.col("pos").cast(pl.Int64) - 1
+        return variants.lazy().select(
+            pl.col("chrom").cast(pl.String),
+            start.alias("start"),
+            (start + pl.col("ref").cast(pl.String).str.len_chars()).alias("end"),
+            pl.col("pos").cast(pl.Int64),
+            pl.col("ref").cast(pl.String),
+            pl.col("alt").cast(pl.String),
+            *[c for c in columns if c not in ("chrom", "start", "end", "pos", "ref", "alt")],
+        )
 
     @staticmethod
     def _read_intervals(intervals, interval_attrs=()) -> pl.DataFrame:
@@ -266,6 +254,36 @@ class BaseVariantMatcher:
             for chrom, start, end, strand, *values in rows.select("chrom", "start", "end", "strand", *attrs).iter_rows()
         ]
 
+    def _variants_of(self, pairs: pl.DataFrame) -> List[Variant]:
+        """Variant objects of the variant columns in `pairs` (the output of `pairs` or `iter_batches`)."""
+        if self._variants is not None:
+            return [self._variants[i] for i in pairs.get_column("variant_idx")]
+        # an overlapping variant has the chrom of its interval
+        columns = pairs.select("chrom", "variant_pos", "variant_ref", "variant_alt")
+        return [Variant(chrom, pos, ref, alt) for chrom, pos, ref, alt in columns.iter_rows()]
+
+    def scan_pairs(self) -> pl.LazyFrame:
+        """Return all interval-variant pairs as a LazyFrame, without sorting.
+
+        With a VCF file or a LazyFrame as the variant source, the variants
+        stream through the overlap join. So for a large VCF, write the pairs
+        with `sink_parquet`, or process them with `collect_batches`.
+
+        Returns:
+          The pairs as described in `overlap_variants`, in no fixed order.
+          variant_idx counts the variants in the order of the variant source.
+        """
+        return _overlap_lazy(self._interval_frame, self._variant_frame)
+
+    def pairs(self) -> pl.DataFrame:
+        """Return all interval-variant pairs from one overlap join.
+
+        Returns:
+          The pairs as described in `overlap_variants`. variant_idx counts
+          the variants in the order of the variant source.
+        """
+        return self.scan_pairs().collect().sort(["variant_idx", "interval_idx"])
+
     def __iter__(self):
         raise NotImplementedError()
 
@@ -275,56 +293,50 @@ class SingleVariantMatcher(BaseVariantMatcher):
     Match each variant with each interval it overlaps.
 
     Iterating yields (Interval, Variant) pairs. `pairs()` returns all pairs
-    as one polars DataFrame.
+    as one polars DataFrame, and `scan_pairs()` as a LazyFrame.
     """
 
-    def pairs(self) -> pl.DataFrame:
-        """Return all interval-variant pairs from one overlap join.
+    def iter_batches(self) -> Iterator[pl.DataFrame]:
+        """Yield the pairs of `variant_batch_size` variants at a time.
 
-        This reads all variants of the source into one polars DataFrame,
-        but keeps no Variant objects.
-
-        Returns:
-          The pairs as described in `overlap_variants`. variant_idx counts
-          the variants in the order of the variant source.
+        Each batch costs one overlap join. variant_idx counts the variants
+        over all batches, and each batch is sorted by variant_idx and then
+        by interval_idx.
         """
         pl, _ = _import_polars()
-        batches = [variants_to_polars(b) for b in self.variant_fetcher.batch_iter(self.variant_batch_size)]
-        variants = pl.concat(batches) if batches else variants_to_polars([])
-        return overlap_variants(self._interval_frame, variants)
-
-    def iter_batches(self) -> Iterator[Tuple[List[Variant], pl.DataFrame]]:
-        """Yield each batch of variants together with its pairs.
-
-        Each batch holds up to `variant_batch_size` variants and costs one
-        overlap join. In the pairs, variant_idx indexes into the batch.
-        """
-        for batch in self.variant_fetcher.batch_iter(self.variant_batch_size):
-            batch = list(batch)
-            yield batch, overlap_variants(self._interval_frame, variants_to_polars(batch))
+        offset = 0
+        for batch in self._variant_frame.collect_batches(chunk_size=self.variant_batch_size):
+            pairs = _overlap_lazy(self._interval_frame, batch).collect()
+            yield pairs.with_columns(pl.col("variant_idx") + offset).sort(["variant_idx", "interval_idx"])
+            offset += batch.height
 
     def __iter__(self) -> Iterator[Tuple[Interval, Variant]]:
         """
         Yield (Interval, Variant) for each overlapping pair.
 
         The pairs come in the order of the variant source, and per variant
-        in the order of the intervals.
+        in the order of the intervals. With Variant objects as `variants`,
+        it yields these objects. Otherwise it builds Variant objects from
+        chrom, pos, ref and alt.
         """
-        for batch, pairs in self.iter_batches():
-            intervals = self._intervals_of(pairs)
-            for interval, variant_idx in zip(intervals, pairs.get_column("variant_idx")):
-                yield interval, batch[variant_idx]
+        for pairs in self.iter_batches():
+            yield from zip(self._intervals_of(pairs), self._variants_of(pairs))
 
 
 class MultiVariantsMatcher(BaseVariantMatcher):
     """
     Match each interval with all variants that overlap it.
 
-    Iterating yields (Interval, variants) pairs in the order of the intervals.
-    The variants come from `VariantFetcher.fetch_variants`.
+    Iterating yields (Interval, variants) pairs in the order of the intervals,
+    also for intervals without variants. The variants of an interval come in
+    the order of the variant source.
     """
 
     def __iter__(self) -> Iterator[Tuple[Interval, Iterator[Variant]]]:
+        pairs = self.pairs()
+        variants = defaultdict(list)
+        for interval_idx, variant in zip(pairs.get_column("interval_idx"), self._variants_of(pairs)):
+            variants[interval_idx].append(variant)
         intervals = self._intervals if self._intervals is not None else self._intervals_of(self._interval_frame)
-        for i in intervals:
-            yield i, self.variant_fetcher.fetch_variants(i)
+        for interval_idx, interval in enumerate(intervals):
+            yield interval, iter(variants[interval_idx])
