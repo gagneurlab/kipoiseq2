@@ -112,15 +112,34 @@ def test_BaseVariantMatcher__read_intervals():
 
 def test_BaseVariantMatcher_intervals_input():
     from_frame = SingleVariantMatcher(variants=variants, intervals=interval_frame)
-    assert from_frame._intervals is None
-    assert from_frame._interval_frame.height == interval_frame.height
+    assert from_frame._interval_objects is None
+    assert from_frame.intervals.height == interval_frame.height
 
     from_objects = SingleVariantMatcher(variants=variants, intervals=intervals)
-    assert from_objects._intervals == intervals
-    assert from_objects._interval_frame["chrom"].to_list() == ["chr1", "chr1", "chr10"]
+    assert from_objects._interval_objects == intervals
+    assert from_objects.intervals["chrom"].to_list() == ["chr1", "chr1", "chr10"]
 
     with pytest.raises(TypeError):
         SingleVariantMatcher(variants=variants)
+
+
+def test_BaseVariantMatcher_intervals_attribute():
+    matcher = MultiVariantsMatcher(
+        variants=variants, intervals=interval_frame.drop("strand"), interval_attrs=["gene_id"]
+    )
+    assert isinstance(matcher.intervals, pl.DataFrame)
+    assert matcher.intervals.columns == ["chrom", "start", "end", "strand", "gene_id"]
+    assert matcher.intervals.rows() == [
+        ("chr1", 1, 10, ".", "g1"),
+        ("chr1", 23, 30, ".", "g2"),
+        ("chr1", 5, 50, ".", "g3"),
+        ("chr10", 1, 30, ".", "g4"),
+    ]
+
+    matcher = SingleVariantMatcher(variants=variants, intervals=intervals)
+    assert isinstance(matcher.intervals, pl.DataFrame)
+    assert matcher.intervals.columns == ["chrom", "start", "end", "strand"]
+    assert matcher.intervals.rows() == [("chr1", 1, 10, "+"), ("chr1", 23, 30, "-"), ("chr10", 1, 30, "+")]
 
 
 def test_SingleVariantMatcher__iter__():

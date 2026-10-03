@@ -137,6 +137,8 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 The matchers use polars instead of pyranges:
 - `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`. `intervals` also takes a sequence of Interval objects.
   For a PyRanges object `pr`, pass `intervals=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
+- The matcher attribute `pr` becomes `intervals`: a polars DataFrame with the columns `chrom`, `start`, `end`, `strand` and the `interval_attrs` columns, instead of a PyRanges object.
+  In `MultiVariantsMatcher`, `intervals` was a list of Interval objects and is now this DataFrame too.
 - `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `intervals`.
 - `variant_fetcher` and `VariantFetcher` are gone. Pass the path of a VCF file as `vcf_file`, or a polars frame or Variant objects as `variants`.
   Arguments after `variants` are keyword-only.

@@ -153,6 +153,13 @@ def _overlap_lazy(intervals: pl.DataFrame, variants: Union[pl.DataFrame, pl.Lazy
 class BaseVariantMatcher:
     """
     Base variant intervals matcher
+
+    Attributes:
+      intervals: the intervals as a polars DataFrame, one row per interval in
+        the given order. Its columns are chrom, start, end (0-based,
+        half-open), strand ("." if the `intervals` DataFrame has no strand
+        column) and the `interval_attrs` columns. The row number is the
+        interval_idx of the pairs.
     """
 
     def __init__(
@@ -189,11 +196,11 @@ class BaseVariantMatcher:
         self._variant_frame = self._read_variants(vcf_file, variants)
         self.interval_attrs = list(interval_attrs or [])
         pl, _ = _import_polars()
-        self._intervals: Optional[List[Interval]] = None
+        self._interval_objects: Optional[List[Interval]] = None
         if not isinstance(intervals, pl.DataFrame):
             # a generator can be consumed only once
-            self._intervals = intervals = list(cast(Iterable[Interval], intervals))
-        self._interval_frame = self._read_intervals(intervals, self.interval_attrs)
+            self._interval_objects = intervals = list(cast(Iterable[Interval], intervals))
+        self.intervals = self._read_intervals(intervals, self.interval_attrs)
         self.variant_batch_size = variant_batch_size
 
     def _read_variants(self, vcf_file=None, variants=None) -> pl.LazyFrame:
@@ -248,8 +255,8 @@ class BaseVariantMatcher:
 
     def _intervals_of(self, rows: pl.DataFrame) -> List[Interval]:
         """Interval objects of the interval columns in `rows` (the interval frame or overlap_variants output)."""
-        if self._intervals is not None:
-            return [self._intervals[i] for i in rows.get_column("interval_idx")]
+        if self._interval_objects is not None:
+            return [self._interval_objects[i] for i in rows.get_column("interval_idx")]
         attrs = self.interval_attrs
         return [
             Interval(chrom, start, end, strand=strand, attrs=dict(zip(attrs, values)))
@@ -275,7 +282,7 @@ class BaseVariantMatcher:
           The pairs as described in `overlap_variants`, in no fixed order.
           variant_idx counts the variants in the order of the variant source.
         """
-        return _overlap_lazy(self._interval_frame, self._variant_frame)
+        return _overlap_lazy(self.intervals, self._variant_frame)
 
     def pairs(self) -> pl.DataFrame:
         """Return all interval-variant pairs from one overlap join.
@@ -308,7 +315,7 @@ class SingleVariantMatcher(BaseVariantMatcher):
         pl, _ = _import_polars()
         offset = 0
         for batch in self._variant_frame.collect_batches(chunk_size=self.variant_batch_size):
-            pairs = _overlap_lazy(self._interval_frame, batch).collect()
+            pairs = _overlap_lazy(self.intervals, batch).collect()
             yield pairs.with_columns(pl.col("variant_idx") + offset).sort(["variant_idx", "interval_idx"])
             offset += batch.height
 
@@ -339,6 +346,6 @@ class MultiVariantsMatcher(BaseVariantMatcher):
         variants = defaultdict(list)
         for interval_idx, variant in zip(pairs.get_column("interval_idx"), self._variants_of(pairs)):
             variants[interval_idx].append(variant)
-        intervals = self._intervals if self._intervals is not None else self._intervals_of(self._interval_frame)
+        intervals = self._interval_objects if self._interval_objects is not None else self._intervals_of(self.intervals)
         for interval_idx, interval in enumerate(intervals):
             yield interval, iter(variants[interval_idx])
