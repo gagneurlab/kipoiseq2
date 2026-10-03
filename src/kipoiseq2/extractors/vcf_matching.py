@@ -167,7 +167,7 @@ class BaseVariantMatcher:
         variants: Optional[Sequence[Variant]] = None,
         variant_fetcher: Optional[VariantFetcher] = None,
         *,
-        intervals: Union[pl.DataFrame, Sequence[Interval]],
+        intervals: Union[pl.DataFrame, Iterable[Interval]],
         interval_attrs: Optional[Sequence[str]] = None,
         vcf_lazy: bool = True,
         variant_batch_size: int = 10000,
@@ -183,7 +183,8 @@ class BaseVariantMatcher:
           variant_fetcher: a VariantFetcher, e.g. a `MultiSampleVCF`.
           intervals: either a polars DataFrame with the columns chrom, start
             and end (0-based, half-open), an optional strand column and the
-            columns in `interval_attrs`, or Interval objects. The matchers
+            columns in `interval_attrs`, or Interval objects (any iterable,
+            e.g. a list or a generator). The matchers
             yield Interval objects as given, so they keep their name and attrs.
           interval_attrs: columns of the `intervals` DataFrame to copy into
             `Interval.attrs`. Not valid with Interval objects.
@@ -194,10 +195,11 @@ class BaseVariantMatcher:
         self.variant_fetcher = self._read_variants(vcf_file, variants, variant_fetcher, vcf_lazy)
         self.interval_attrs = list(interval_attrs or [])
         pl, _ = _import_polars()
-        self._interval_frame = self._read_intervals(intervals, self.interval_attrs)
         self._intervals: Optional[List[Interval]] = None
         if not isinstance(intervals, pl.DataFrame):
-            self._intervals = list(cast(Sequence[Interval], intervals))
+            # a generator can be consumed only once
+            self._intervals = intervals = list(cast(Iterable[Interval], intervals))
+        self._interval_frame = self._read_intervals(intervals, self.interval_attrs)
         self.variant_batch_size = variant_batch_size
 
     @staticmethod

@@ -176,6 +176,17 @@ def test_SingleVariantMatcher__iter__():
     assert list(SingleVariantMatcher(vcf_file, intervals=interval_frame, variant_batch_size=1)) == expected
 
 
+def test_SingleVariantMatcher_generator_of_intervals():
+    inters = intervals + [Interval("chr1", 5, 50)]
+    expected = [
+        (inters[0], variants[0]),
+        (inters[0], variants[1]),
+        (inters[1], variants[2]),
+        (inters[3], variants[2]),
+    ]
+    assert list(SingleVariantMatcher(variants=variants, intervals=(i for i in inters))) == expected
+
+
 def test_SingleVariantMatcher_interval_attrs():
     pairs = list(SingleVariantMatcher(vcf_file, intervals=interval_frame, interval_attrs=["gene_id"]))
     assert [i.attrs for i, _ in pairs] == [{"gene_id": "g1"}, {"gene_id": "g1"}, {"gene_id": "g2"}, {"gene_id": "g3"}]
