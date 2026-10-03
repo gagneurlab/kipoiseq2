@@ -344,7 +344,7 @@ test = [
 requires-dist = [
     { name = "cyvcf2", marker = "extra == 'vcf'", specifier = ">=0.11.0" },
     { name = "numpy" },
-    { name = "polars", marker = "extra == 'ranges'", specifier = ">=1" },
+    { name = "polars", marker = "extra == 'ranges'", specifier = ">=1.37.1" },
     { name = "polars-bio", marker = "extra == 'ranges'", specifier = ">=0.31" },
     { name = "pyfaidx" },
 ]

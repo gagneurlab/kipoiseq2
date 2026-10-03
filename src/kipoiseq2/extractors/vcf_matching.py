@@ -35,7 +35,9 @@ def _import_polars():
         import polars as pl
         import polars_bio as pb
     except ImportError as e:
-        raise ImportError("Variant matching needs the `ranges` extra: pip install 'kipoiseq2[ranges]'") from e
+        raise ImportError(
+            "VCF reading and variant matching need the `ranges` extra: pip install 'kipoiseq2[ranges]'"
+        ) from e
     return pl, pb
 
 

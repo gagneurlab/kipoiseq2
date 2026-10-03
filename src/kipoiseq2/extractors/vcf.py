@@ -1,18 +1,81 @@
+"""Read VCF files.
+
+`scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame,
+with one row per ALT allele. It needs the `ranges` extra (polars and
+polars-bio).
+
+`MultiSampleVCF` reads a VCF file with cyvcf2 and yields Variant objects.
+It needs the `vcf` extra.
+"""
+
+from __future__ import annotations
+
 import logging
 from collections import defaultdict
-from typing import Dict, Iterable, Iterator, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Union
 
 from kipoiseq2.dataclasses import Interval, Variant
+from kipoiseq2.extractors.vcf_matching import _import_polars
 from kipoiseq2.extractors.vcf_query import VariantIntervalQueryable
 from kipoiseq2.utils import batch_iter
 from kipoiseq2.variant_source import VariantFetcher
+
+if TYPE_CHECKING:
+    import polars as pl
 
 try:
     from cyvcf2 import VCF
 except ImportError:
     VCF = object
 
-__all__ = ["MultiSampleVCF"]
+__all__ = ["scan_vcf_variants", "MultiSampleVCF"]
+
+# the columns of polars_bio.scan_vcf without INFO and FORMAT fields
+_SCAN_VCF_COLUMNS = ("chrom", "start", "end", "id", "ref", "alt", "qual", "filter")
+
+
+def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
+    """Read the variants of a VCF file as a polars LazyFrame, with one row per ALT allele.
+
+    The file is read lazily with `polars_bio.scan_vcf`. A record with
+    several ALT alleles gives one row per ALT allele. ALT alleles that
+    contain `N` or `*` are dropped, as in `MultiSampleVCF`. An ALT of `.`
+    gives an empty alt.
+
+    Args:
+      path: path of the VCF file.
+      **scan_vcf_kwargs: keyword arguments of `polars_bio.scan_vcf`, e.g.
+        `info_fields=["AF"]`. They override the defaults
+        `use_zero_based=True, info_fields=[], format_fields=[]`.
+
+    Returns:
+      LazyFrame with the columns chrom, start (`pos - 1`), end
+      (`start + len(ref)`), pos (the 1-based VCF POS), ref, alt, allele_idx
+      (the 1-based index of the ALT allele in the record) and the requested
+      INFO and FORMAT fields. start and end ignore INFO/END. A field with
+      one value per ALT allele (Number=A) keeps all values of the record,
+      so select the value of the row with
+      `pl.col("AF").list.get(pl.col("allele_idx") - 1)`.
+    """
+    pl, pb = _import_polars()
+    scan = pb.scan_vcf(str(path), **{"use_zero_based": True, "info_fields": [], "format_fields": [], **scan_vcf_kwargs})
+    fields = [c for c in scan.collect_schema().names() if c not in _SCAN_VCF_COLUMNS]
+    # with use_zero_based=False, start is the 1-based POS
+    zero_based = scan.config_meta.get_metadata()["coordinate_system_zero_based"]  # type: ignore[attr-defined]
+    # polars-bio joins the ALT alleles of a record with "|"
+    alts = pl.col("alt").str.split("|")
+    start = pl.col("pos") - 1
+    return (
+        scan.with_columns(
+            pos=pl.col("start").cast(pl.Int64) + int(zero_based),
+            alt=alts,
+            allele_idx=pl.int_ranges(1, alts.list.len() + 1),
+        )
+        .explode("alt", "allele_idx", empty_as_null=False)
+        .filter(~pl.col("alt").str.contains("[N*]"))
+        .with_columns(start=start, end=start + pl.col("ref").str.len_chars())
+        .select("chrom", "start", "end", "pos", "ref", "alt", "allele_idx", *fields)
+    )
 
 
 class MultiSampleVCF(VariantFetcher, VCF):

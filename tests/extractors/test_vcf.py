@@ -1,10 +1,11 @@
 import sys
 
+import polars as pl
 import pytest
 from conftest import sample_5kb_fasta_file, test_with_multiple_variants, vcf_file
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors.vcf import MultiSampleVCF
+from kipoiseq2.extractors.vcf import MultiSampleVCF, scan_vcf_variants
 from kipoiseq2.extractors.vcf_query import NumberVariantQuery
 
 fasta_file = sample_5kb_fasta_file
@@ -184,3 +185,48 @@ def test_batch_iter_vcf(multi_sample_vcf):
 def test_MultiSampleVCF_query_all(multi_sample_vcf):
     variants = list(multi_sample_vcf.query_all())
     assert len(variants) == 3
+
+
+def _cyvcf2_variants(path):
+    """chrom, start, end, pos, ref and alt of the Variants of MultiSampleVCF."""
+    return [(v.chrom, v.start, v.end, v.pos, v.ref, v.alt) for v in MultiSampleVCF(path)]
+
+
+@pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants])
+def test_scan_vcf_variants_equals_MultiSampleVCF(path):
+    df = scan_vcf_variants(path).collect()
+    assert df.select("chrom", "start", "end", "pos", "ref", "alt").rows() == _cyvcf2_variants(path)
+
+
+def test_scan_vcf_variants_edge_cases(edge_case_vcf):
+    df = scan_vcf_variants(edge_case_vcf).collect()
+    assert df.select("chrom", "start", "end", "pos", "ref", "alt").rows() == _cyvcf2_variants(edge_case_vcf)
+    # one row per ALT allele, without the ALT alleles that contain N or *
+    assert df.select("pos", "alt", "allele_idx").rows() == [
+        (10, "C", 1),
+        (10, "G", 2),
+        (20, "<DEL>", 1),
+        (30, "", 1),
+        (5, "T", 1),
+        (5, "TAA", 2),
+    ]
+    # end follows REF, not INFO/END=40
+    assert df.filter(pl.col("alt") == "<DEL>").select("start", "end").row(0) == (19, 23)
+
+
+def test_scan_vcf_variants_columns():
+    lf = scan_vcf_variants(vcf_file, info_fields=["DP"])
+    assert lf.collect_schema() == pl.Schema(
+        {
+            "chrom": pl.String,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "pos": pl.Int64,
+            "ref": pl.String,
+            "alt": pl.String,
+            "allele_idx": pl.Int64,
+            "DP": pl.Int32,
+        }
+    )
+    # start and end do not depend on the coordinate system of polars-bio
+    assert scan_vcf_variants(vcf_file, use_zero_based=False).collect().equals(scan_vcf_variants(vcf_file).collect())

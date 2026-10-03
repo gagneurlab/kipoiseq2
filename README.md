@@ -15,7 +15,7 @@ Requires Python >= 3.12.
 ```bash
 pip install kipoiseq2               # FASTA extractors and transforms (numpy, pyfaidx)
 pip install 'kipoiseq2[vcf]'        # + MultiSampleVCF and the VCF-based extractors (cyvcf2)
-pip install 'kipoiseq2[ranges]'     # + SingleVariantMatcher and MultiVariantsMatcher (polars, polars-bio)
+pip install 'kipoiseq2[ranges]'     # + scan_vcf_variants, SingleVariantMatcher and MultiVariantsMatcher (polars, polars-bio)
 pip install 'kipoiseq2[vcf,ranges]' # everything
 ```
 
@@ -43,6 +43,21 @@ alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
 `Variant.start` is `pos - 1` and `Variant.end` is `start + len(ref)`.
+
+### Reading VCF files as tables
+
+`scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame, with one row per ALT allele.
+Its coordinates follow `Variant`: `start` is `pos - 1` and `end` is `start + len(ref)`.
+
+```python
+import polars as pl
+from kipoiseq2.extractors import scan_vcf_variants
+
+# chrom, start, end, pos, ref, alt, allele_idx and the INFO field AF
+variants = scan_vcf_variants("variants.vcf.gz", info_fields=["AF"])
+# AF holds one value per ALT allele of the record, and allele_idx picks the one of this row
+common = variants.filter(pl.col("AF").list.get(pl.col("allele_idx") - 1) > 0.01).collect()
+```
 
 ### Matching variants with intervals
 
