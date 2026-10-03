@@ -185,7 +185,10 @@ class VariantIntervalQueryable:
           remove_samples: remove sample columns from vcf file
           clean_info: clean info fields from vcf file
         """
-        from cyvcf2 import Writer
+        try:
+            from cyvcf2 import Writer
+        except ImportError as e:
+            raise ImportError("to_vcf needs the `vcf` extra: pip install 'kipoiseq2[vcf]'") from e
 
         header = self.vcf.raw_header
 

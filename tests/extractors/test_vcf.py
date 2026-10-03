@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from conftest import sample_5kb_fasta_file, test_with_multiple_variants, vcf_file
 
@@ -13,6 +15,12 @@ intervals = [Interval("chr1", 3, 10), Interval("chr1", 4, 30), Interval("chr1", 
 @pytest.fixture
 def multi_sample_vcf():
     return MultiSampleVCF(vcf_file)
+
+
+def test_MultiSampleVCF_without_vcf_extra(monkeypatch):
+    monkeypatch.setitem(sys.modules, "cyvcf2", None)
+    with pytest.raises(ImportError, match=r"kipoiseq2\[vcf\]"):
+        MultiSampleVCF(vcf_file)
 
 
 def test_MultiSampleVCF__next__(multi_sample_vcf):
@@ -139,6 +147,13 @@ def test_MultiSampleVCF_VariantQueryable_to_vcf(tmpdir, multi_sample_vcf):
     assert len(variants) == 1
     assert variants[0].ref == "AACG"
     assert variants[0].alt == "GA"
+
+
+def test_to_vcf_without_vcf_extra(monkeypatch, tmpdir, multi_sample_vcf):
+    queryable = multi_sample_vcf.query_all()
+    monkeypatch.setitem(sys.modules, "cyvcf2", None)
+    with pytest.raises(ImportError, match=r"kipoiseq2\[vcf\]"):
+        queryable.to_vcf(str(tmpdir / "output.vcf"))
 
 
 def test_batch_iter_vcf(multi_sample_vcf):
