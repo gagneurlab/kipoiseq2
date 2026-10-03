@@ -103,6 +103,8 @@ With a VCF file, the peak memory of `scan_pairs().sink_parquet(...)` and `iter_b
 `pairs()` holds all pairs in memory.
 The pairs come in VCF order, and per variant in the order of the intervals.
 `MultiVariantsMatcher` yields each interval with an iterator over its variants, also if the interval has no variants.
+polars-bio prints a progress bar on stderr for each collect, so `iter_batches()` prints one per batch.
+Set the environment variable `TQDM_DISABLE=1` to turn it off.
 
 More examples:
 - The tests in [tests/](tests/) show the usage of every extractor and transform.
