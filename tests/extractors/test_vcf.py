@@ -137,6 +137,26 @@ def test_MultiSampleVCF__regions_from_variants(multi_sample_vcf):
     )
 
 
+def test_MultiSampleVCF__regions_from_variants_variant_gap(multi_sample_vcf):
+    variants = [Variant("chr1", 4, "T", "C"), Variant("chr1", 25, "AACG", "GA")]
+
+    assert multi_sample_vcf._regions_from_variants(variants, variant_gap=150) == [Interval("chr1", 3, 25)]
+    assert set(multi_sample_vcf._regions_from_variants(variants, variant_gap=10)) == {
+        Interval("chr1", 3, 4),
+        Interval("chr1", 24, 25),
+    }
+
+
+def test_MultiSampleVCF_get_variants_variant_gap(multi_sample_vcf, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        multi_sample_vcf, "_regions_from_variants", lambda v, variant_gap: seen.append(variant_gap) or []
+    )
+
+    multi_sample_vcf.get_variants(["chr1:4:T>C"], variant_gap=10)
+    assert seen == [10]
+
+
 def test_MultiSampleVCF_VariantQueryable_to_vcf(tmpdir, multi_sample_vcf):
     output_vcf_file = str(tmpdir / "output.vcf")
 

@@ -149,7 +149,9 @@ class MultiSampleVCF(VariantFetcher, VCF):
             variants: list of variants
             regions: list of regions to seek for variants.
               Automatically generated from variants if not given.
-            strategy: strategy if there is not variant in region.
+            variant_gap: only used if `regions` is not given. Variants on
+              the same chromosome closer than this many bases share one
+              generated region.
 
         # Returns
            List of variants
@@ -174,7 +176,7 @@ class MultiSampleVCF(VariantFetcher, VCF):
             start_i = starts[0]
             prev_i = starts[0]
             for i in starts[1:]:
-                if prev_i + 150 < i:
+                if prev_i + variant_gap < i:
                     regions.append(Interval(chrom, start_i - 1, prev_i))
                     start_i = i
                 prev_i = i
