@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Any, Sequence
 
 import numpy as np
@@ -231,25 +230,25 @@ def resize_interval(interval, width, anchor="center"):
     """Resize the Interval. Returns new Interval instance with correct length.
 
     Arguments:
-        interval: an object with writable `start` and `end` attributes
+        interval: an `Interval`. It is not modified.
         width: desired width of the output interval
         anchor (str): which part of the sequence should be anchored. Choices: 'start', 'center', or 'end'
     """
-    interval = deepcopy(interval)
-
     if anchor == "start":
-        interval.end = interval.start + width
+        start = interval.start
+        end = interval.start + width
     elif anchor == "end":
-        interval.start = interval.end - width
+        start = interval.end - width
+        end = interval.end
     elif anchor == "center":
         center = int((interval.start + interval.end) / 2)
         half_len = int(width / 2)
-        interval.start = center - half_len
-        interval.end = center + half_len + width % 2
+        start = center - half_len
+        end = center + half_len + width % 2
     else:
         raise Exception("Interval resizing anchor point can only be 'start', 'end' or 'center'")
 
-    return interval
+    return interval.slop(upstream=interval.start - start, downstream=end - interval.end)
 
 
 TRANSLATION_TABLE = {

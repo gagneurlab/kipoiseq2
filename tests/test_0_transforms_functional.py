@@ -1,8 +1,7 @@
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 
+from kipoiseq2.dataclasses import Interval
 from kipoiseq2.transforms.functional import (
     fixed_len,
     one_hot,
@@ -100,7 +99,7 @@ def test_resize_interval(anchor, ilen):
     dummy_start, dummy_end = 10, 20
     dummy_center = int((dummy_start + dummy_end) / 2)
 
-    dummy_inter = SimpleNamespace(chrom="chr2", start=dummy_start, end=dummy_end, name="intname")
+    dummy_inter = Interval("chr2", dummy_start, dummy_end, name="intname", strand="-")
     ret_inter = resize_interval(dummy_inter, ilen, anchor)
 
     # the original interval was left intact
@@ -112,6 +111,7 @@ def test_resize_interval(anchor, ilen):
     # metadata kept
     assert ret_inter.chrom == dummy_inter.chrom
     assert ret_inter.name == "intname"
+    assert ret_inter.strand == "-"
 
     # desired output width
     assert ret_inter.end - ret_inter.start == ilen
@@ -130,7 +130,7 @@ def test_ResizeInterval():
     dummy_start, dummy_end = 10, 20
     dummy_center = int((dummy_start + dummy_end) / 2)
     ilen = 4
-    dummy_inter = SimpleNamespace(chrom="chr2", start=dummy_start, end=dummy_end, name="intname")
+    dummy_inter = Interval("chr2", dummy_start, dummy_end, name="intname", strand="-")
     ri = ResizeInterval(ilen, "center")
     ret_inter = ri(dummy_inter)
     assert int((ret_inter.start + ret_inter.end) / 2) == dummy_center
@@ -144,6 +144,7 @@ def test_ResizeInterval():
     # metadata kept
     assert ret_inter.chrom == dummy_inter.chrom
     assert ret_inter.name == "intname"
+    assert ret_inter.strand == "-"
 
     # desired output width
     assert ret_inter.end - ret_inter.start == ilen
