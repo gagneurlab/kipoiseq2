@@ -173,6 +173,17 @@ def test_extract(variant_seq_extractor):
     assert seq == "ACG"
 
 
+@pytest.mark.parametrize("anchor", [15, 20, 25])
+def test_extract_deletion_before_interval(variant_seq_extractor, anchor):
+    # the deletion lies before the interval, so the sequence is the reference of the interval.
+    # The anchor 15 is clamped to the interval start.
+    interval = Interval("chr1", 20, 30)
+    deletion = Variant("chr1", 12, "CG", "C")
+    seq = variant_seq_extractor.extract(interval, [deletion], anchor=anchor, fixed_len=True)
+    assert len(seq) == interval.end - interval.start
+    assert seq == "ACGTAACGTA"
+
+
 # sample.5kb.fa has one 5000 bp chromosome that repeats ACGTA
 CHROM_LEN = 5000
 

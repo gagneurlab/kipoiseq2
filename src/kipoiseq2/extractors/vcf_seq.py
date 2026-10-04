@@ -314,7 +314,8 @@ class VariantSeqExtractor(BaseExtractor):
         down_len = anchor - interval.start
         down_diff = len(down_str) - down_len
         if down_diff > 0:
-            down_str = down_str[-down_len:]
+            # down_str[-down_len:] would keep the whole string for down_len == 0
+            down_str = down_str[len(down_str) - down_len :]
         elif down_diff < 0:
             if is_padding:
                 down_str = "N" * abs(down_diff) + down_str
