@@ -1,4 +1,5 @@
-from typing import Any, Sequence
+import string
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -319,22 +320,65 @@ TRANSLATION_TABLE = {
 }
 
 
-def translate(seq: str) -> str:
-    """Translate a DNA sequence into amino acids with the standard genetic code.
+# NCBI genetic code 2, the vertebrate mitochondrial code
+_VERTEBRATE_MITOCHONDRIAL_TABLE = {**TRANSLATION_TABLE, "AGA": "_", "AGG": "_", "ATA": "M", "TGA": "W"}
+
+# NCBI genetic code id -> codon table. Table 11 differs from table 1 only in its start codons.
+_GENETIC_CODES = {1: TRANSLATION_TABLE, 2: _VERTEBRATE_MITOCHONDRIAL_TABLE, 11: TRANSLATION_TABLE}
+
+_TRANSL_EXCEPT_SYMBOLS = frozenset(string.ascii_uppercase + "_")
+
+
+def translate(seq: str, transl_table: int = 1, transl_except: Mapping[int, str] | None = None) -> str:
+    """Translate a DNA sequence into amino acids with an NCBI genetic code and annotated translation exceptions.
 
     Stop codons become `_`, and translation continues after them.
 
+    kipoiseq2 has no CDS model, so for the sequence of a variant the caller moves the exceptions.
+    Keep an exception only at a reference codon that the variant leaves unchanged and in frame.
+    Downstream of an in-frame indel, add `(len(alt) - len(ref)) // 3` to the exception positions.
+    Downstream of a frameshift, drop the exceptions.
+    Then a new TGA elsewhere translates as a stop.
+
     # Arguments
-        seq: DNA sequence in upper case, with a length that is a multiple of 3
+        seq: DNA sequence in upper case, with a length that is a multiple of 3.
+            A partial last codon is allowed if `transl_except` covers it,
+            e.g. a mitochondrial stop that poly(A) completes.
+        transl_table: NCBI genetic code id, as in cdot `translation.transl_table` and in GFF.
+            1 and 11 use `TRANSLATION_TABLE`.
+            Table 11 differs from table 1 only in its start codons, so pass a non-AUG start as `{1: "M"}`.
+            2 uses the vertebrate mitochondrial code, where AGA and AGG are stops, ATA is M and TGA is W.
+        transl_except: map from a 1-based codon number to a one-letter amino acid, as in cdot `transl_except` and HGVS p.,
+            e.g. `{8: "U"}` for selenocysteine, `{1: "M"}` for a non-AUG start or `{n: "_"}` for a stop.
+            The exception sets the amino acid of its codon, so that codon is not looked up in the table.
 
     # Returns
         Amino acid sequence with one letter per codon
 
     # Raises
-        ValueError: if the length of `seq` is not a multiple of 3
-        KeyError: if a codon is not in `TRANSLATION_TABLE`, e.g. because it contains N
+        ValueError: if `transl_table` is not 1, 2 or 11,
+            if a position in `transl_except` is not an int from 1 to the number of codons,
+            if an amino acid in `transl_except` is not an upper-case ASCII letter or `_`,
+            or if the length of `seq` is not a multiple of 3 and `transl_except` does not cover the partial last codon
+        KeyError: if a codon without an exception is not in the table, e.g. because it contains N
     """
-    if len(seq) % 3 != 0:
-        raise ValueError("len(seq) % 3 != 0")
+    if transl_table not in _GENETIC_CODES:
+        raise ValueError(f"transl_table must be one of {sorted(_GENETIC_CODES)}, got {transl_table!r}")
+    table = _GENETIC_CODES[transl_table]
 
-    return "".join(TRANSLATION_TABLE[seq[i : i + 3]] for i in range(0, len(seq), 3))
+    transl_except = transl_except or {}
+    n_codons = (len(seq) + 2) // 3
+    for position, amino_acid in transl_except.items():
+        if not isinstance(position, int) or not 1 <= position <= n_codons:
+            raise ValueError(f"transl_except position must be an int from 1 to {n_codons}, got {position!r}")
+        if not isinstance(amino_acid, str) or amino_acid not in _TRANSL_EXCEPT_SYMBOLS:
+            raise ValueError(f"transl_except amino acid must be one upper-case ASCII letter or '_', got {amino_acid!r}")
+
+    if len(seq) % 3 != 0 and n_codons not in transl_except:
+        raise ValueError(f"len(seq) % 3 != 0 and transl_except does not cover the partial last codon {n_codons}")
+
+    codons = (seq[i : i + 3] for i in range(0, len(seq), 3))
+    return "".join(
+        transl_except[number] if number in transl_except else table[codon]
+        for number, codon in enumerate(codons, start=1)
+    )

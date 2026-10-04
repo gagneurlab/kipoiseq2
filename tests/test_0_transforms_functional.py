@@ -104,6 +104,37 @@ def test_translate():
         translate("ATGNNN")
 
 
+def test_translate_transl_table():
+    seq = "AGAAGGATATGA"
+    assert translate(seq) == "RRI_"
+    assert translate(seq, transl_table=11) == translate(seq, transl_table=1)
+    assert translate(seq, transl_table=2) == "__MW"
+    with pytest.raises(ValueError, match=r"\[1, 2, 11\]"):
+        translate(seq, transl_table=3)
+
+
+def test_translate_transl_except():
+    # selenocysteine at codon 2, and the TGA at codon 3 stays a stop
+    assert translate("ATGTGATGATAA", transl_except={2: "U"}) == "MU__"
+    # non-AUG start
+    assert translate("ACGTGG", transl_except={1: "M"}) == "MW"
+    # an exception codon is not looked up in the table
+    assert translate("ATGNNN", transl_except={2: "X"}) == "MX"
+
+
+def test_translate_transl_except_partial_codon():
+    # mitochondrial stop that poly(A) completes
+    assert translate("ATGT", transl_table=2, transl_except={2: "_"}) == "M_"
+    with pytest.raises(ValueError):
+        translate("ATGT", transl_table=2)
+
+
+@pytest.mark.parametrize("transl_except", [{0: "U"}, {3: "U"}, {1: "Sec"}, {1: ""}, {1: "u"}])
+def test_translate_invalid_transl_except(transl_except):
+    with pytest.raises(ValueError):
+        translate("ATGTGA", transl_except=transl_except)
+
+
 @pytest.mark.parametrize("anchor", ["start", "end", "center"])
 @pytest.mark.parametrize("ilen", [3, 4])
 def test_resize_interval(anchor, ilen):
