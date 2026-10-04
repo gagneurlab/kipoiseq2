@@ -318,96 +318,23 @@ TRANSLATION_TABLE = {
     "TGG": "W",
 }
 
-TRANSLATION_TABLE_FOR_HG38 = {
-    "ATA": "I",
-    "ATC": "I",
-    "ATT": "I",
-    "ATG": "M",
-    "ACA": "T",
-    "ACC": "T",
-    "ACG": "T",
-    "ACT": "T",
-    "AAC": "N",
-    "AAT": "N",
-    "AAA": "K",
-    "AAG": "K",
-    "AGC": "S",
-    "AGT": "S",
-    "AGA": "R",
-    "AGG": "R",
-    "CTA": "L",
-    "CTC": "L",
-    "CTG": "L",
-    "CTT": "L",
-    "CCA": "P",
-    "CCC": "P",
-    "CCG": "P",
-    "CCT": "P",
-    "CAC": "H",
-    "CAT": "H",
-    "CAA": "Q",
-    "CAG": "Q",
-    "CGA": "R",
-    "CGC": "R",
-    "CGG": "R",
-    "CGT": "R",
-    "GTA": "V",
-    "GTC": "V",
-    "GTG": "V",
-    "GTT": "V",
-    "GCA": "A",
-    "GCC": "A",
-    "GCG": "A",
-    "GCT": "A",
-    "GAC": "D",
-    "GAT": "D",
-    "GAA": "E",
-    "GAG": "E",
-    "GGA": "G",
-    "GGC": "G",
-    "GGG": "G",
-    "GGT": "G",
-    "TCA": "S",
-    "TCC": "S",
-    "TCG": "S",
-    "TCT": "S",
-    "TTC": "F",
-    "TTT": "F",
-    "TTA": "L",
-    "TTG": "L",
-    "TAC": "Y",
-    "TAT": "Y",
-    "TAA": "_",
-    "TAG": "_",
-    "TGC": "C",
-    "TGT": "C",
-    "TGA": "U",
-    "TGG": "W",  # TGA to U instead of STOP codon
-    "XXX": "X",  # ambiguous start
-    "NNN": "",  # empty string for ambiguous protein
-}
 
+def translate(seq: str) -> str:
+    """Translate a DNA sequence into amino acids with the standard genetic code.
 
-def translate(seq: str, hg38=False):
-    """Translate the DNA/RNA sequence into AA.
-
-    Note: it stops after it encounters a stop codon
+    Stop codons become `_`, and translation continues after them.
 
     # Arguments
-        seq: DNA/RNA sequence
-        stop_none: return None if a stop codon is encountered
+        seq: DNA sequence in upper case, with a length that is a multiple of 3
+
+    # Returns
+        Amino acid sequence with one letter per codon
+
+    # Raises
+        ValueError: if the length of `seq` is not a multiple of 3
+        KeyError: if a codon is not in `TRANSLATION_TABLE`, e.g. because it contains N
     """
     if len(seq) % 3 != 0:
         raise ValueError("len(seq) % 3 != 0")
 
-    outl = [""] * (len(seq) // 3)
-    if hg38:
-        for i in range(0, len(seq), 3):
-            codon = seq[i : i + 3]
-            outl[i // 3] = TRANSLATION_TABLE_FOR_HG38[codon]
-    else:
-        for i in range(0, len(seq), 3):
-            codon = seq[i : i + 3]
-            outl[i // 3] = TRANSLATION_TABLE[codon]
-
-    return "".join(outl)
+    return "".join(TRANSLATION_TABLE[seq[i : i + 3]] for i in range(0, len(seq), 3))

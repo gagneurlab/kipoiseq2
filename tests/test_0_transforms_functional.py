@@ -10,6 +10,7 @@ from kipoiseq2.transforms.functional import (
     resize_interval,
     token2one_hot,
     tokenize,
+    translate,
     trim,
 )
 from kipoiseq2.transforms.transforms import ResizeInterval
@@ -91,6 +92,16 @@ def test_pad_sequences():
 
     assert fixed_len(seq, 10, anchor="start", value="N") == seq
     assert fixed_len(seq, 10, anchor="end", value="N") == "CTTACTCAGA"
+
+
+def test_translate():
+    assert translate("ATGTGGTAA") == "MW_"
+    # TGA is a stop codon, and translation continues after it
+    assert translate("ATGTGACCC") == "M_P"
+    with pytest.raises(ValueError):
+        translate("ATGT")
+    with pytest.raises(KeyError):
+        translate("ATGNNN")
 
 
 @pytest.mark.parametrize("anchor", ["start", "end", "center"])

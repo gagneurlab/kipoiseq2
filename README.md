@@ -119,6 +119,8 @@ kipoiseq2 does not install `kipoi`, `kipoi-utils`, `kipoi-conda` or `gffutils`, 
 kipoiseq2 also drops these parts of kipoiseq:
 - the GTF, protein and UTR extractors (`kipoiseq.extractors.gtf`, `protein` and `multi_interval`) and `VariantCombinator`
 - `Interval.from_pybedtools` and `Interval.to_pybedtools`
+- `translate(seq, hg38=True)` and `TRANSLATION_TABLE_FOR_HG38`, because they read every TGA as selenocysteine.
+  Use `translate(seq)` with the standard table and set the annotated selenocysteine codons yourself.
 
 kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra is gone and the `ranges` extra covers VCF reading:
 - `MultiSampleVCF` becomes `scan_vcf_variants`, with one row per ALT allele, or `scan_vcf_genotypes`, with one row per ALT allele and sample.
