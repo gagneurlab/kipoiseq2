@@ -1,14 +1,12 @@
-# Contributing
+# Contributing to `kipoiseq2`
 
 Contributions are welcome, and they are greatly appreciated! Every little bit helps, and credit will always be given.
 
-You can contribute in many ways:
+## Types of contributions
 
-## Types of Contributions
+### Report bugs
 
-### Report Bugs
-
-Report bugs at <https://github.com/kipoi/dataloaders/issues>.
+Report bugs at <https://github.com/gagneurlab/kipoiseq2/issues>.
 
 If you are reporting a bug, please include:
 
@@ -16,21 +14,21 @@ If you are reporting a bug, please include:
 -   Any details about your local setup that might be helpful in troubleshooting.
 -   Detailed steps to reproduce the bug.
 
-### Fix Bugs
+### Fix bugs
 
-Look through the GitHub issues for bugs. Anything tagged with “bug” and “help wanted” is open to whoever wants to implement it.
+Look through the GitHub issues for bugs. Anything tagged with "bug" and "help wanted" is open to whoever wants to implement it.
 
-### Implement Features
+### Implement features
 
-Look through the GitHub issues for features. Anything tagged with “enhancement” and “help wanted” is open to whoever wants to implement it.
+Look through the GitHub issues for features. Anything tagged with "enhancement" and "help wanted" is open to whoever wants to implement it.
 
-### Write Documentation
+### Write documentation
 
-Kipoi could always use more documentation, whether as part of the official Kipoi docs, in docstrings, or even on the web in blog posts, articles, and such.
+kipoiseq2 could always use more documentation, whether as docstrings, in the README, or even on the web in blog posts, articles, and such.
 
-### Submit Feedback
+### Submit feedback
 
-The best way to send feedback is to file an issue at <https://github.com/kipoi/dataloaders/issues>.
+The best way to send feedback is to file an issue at <https://github.com/gagneurlab/kipoiseq2/issues>.
 
 If you are proposing a feature:
 
@@ -43,52 +41,91 @@ If you are proposing a feature:
 - make an issue for the thing you want to implement
 - create the corresponding branch
 - develop
-- write units tests in tests/
+- write unit tests in tests/
 - write documentation in markdown (see other functions for example)
 - push the changes
-- make a pull request
+- make a pull request with a [Conventional Commits](https://www.conventionalcommits.org/) title (see [Releases](#releases))
 - once the pull request is merged, the issue will be closed
 
-## Get Started!
+## Development environment
 
-Ready to contribute? Here’s how to set up kipoi for local development.
+The project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
 
-1.  Fork the kipoi repo on GitHub.
-2.  Clone your fork locally:
+### Initial setup
 
-        $ git clone git@github.com:your_name_here/kipoi-dataloaders.git
+```bash
+git clone git@github.com:gagneurlab/kipoiseq2.git
+cd kipoiseq2
 
-3.  Install your local copy into a conda environment. Assuming you have conda installed, this is how you set up your fork for local development:
+# Create the conda env (provides Python + uv)
+micromamba env create -f environment-dev.yml
+micromamba activate kipoiseq2
 
-        $ conda create -n kipoi-py35 python=3.5
-        $ cd kipoi/
-		$ source activate kipoi-py35
-        $ pip install -e '.[develop]'
+# Install all dependency groups (runtime + dev + test + lint) into a uv-managed venv
+uv sync --all-groups
+```
 
-4.  Create a branch for local development:
+All subsequent commands assume the env is activated and `uv` is on `PATH`.
 
-        $ git checkout -b name-of-your-bugfix-or-feature
+## Running tasks
 
-    Now you can make your changes locally.
+The project standardises tasks through [`tox`](https://tox.wiki/) with the `tox-uv` runner. Run any environment with:
 
-5.  When you’re done making changes, check that your changes pass the tests:
+```bash
+uv run tox -e <env>
+```
 
-        $ py.test tests/ -n 4
+Available environments (defined in `pyproject.toml`):
 
-Where `-n 4` will use 4 cores in parallel to run tests.
+| Env             | Purpose                                  |
+|-----------------|------------------------------------------|
+| `format-check`  | `ruff format --check .`                  |
+| `lints`         | `ruff check .`                           |
+| `typecheck`     | `mypy src/kipoiseq2`                     |
+| `py3.12`        | Run pytest under Python 3.12             |
+| `py3.13`        | Run pytest under Python 3.13             |
+| `py3.14`        | Run pytest under Python 3.14             |
 
-6.  Commit your changes and push your branch to GitHub:
+Run the full matrix CI runs with:
 
-        $ git add .
-        $ git commit -m "Your detailed description of your changes."
-        $ git push origin name-of-your-bugfix-or-feature
+```bash
+uv run tox
+```
 
-7.  Submit a pull request through the GitHub website.
+### Quick commands
 
-## Pull Request Guidelines
+```bash
+# Format code
+uv run ruff format .
+
+# Lint with autofix
+uv run ruff check --fix .
+
+# Run tests directly (single Python)
+uv run pytest
+
+# Run tests in parallel on 4 cores
+uv run pytest -n 4
+
+# Run a single test
+uv run pytest tests/test_1_extractors.py::test_name -x
+```
+
+## Pull request guidelines
 
 Before you submit a pull request, check that it meets these guidelines:
 
 1.  The pull request should include tests.
 2.  If the pull request adds functionality, the docs should be updated. Put your new functionality into a function with a docstring.
-3.  The pull request should work for Python 2.7, 3.5 and 3.6.
+3.  The pull request should pass CI on all supported Python versions (3.12 to 3.14, see `.github/workflows/ci.yml`).
+
+## Releases
+
+Versioning and tagging are automated by [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release-please.yml`). Publishing is handled by `.github/workflows/publish.yml`:
+
+- release-please watches commits on `main` and opens/maintains a release PR that bumps `pyproject.toml` and `src/kipoiseq2/__init__.py` and updates `CHANGELOG.md`.
+- Merging the release PR cuts a `vX.Y.Z` tag and a GitHub release.
+- `release-please.yml` then starts `publish.yml` with `workflow_dispatch` for the new tag. `publish.yml` builds sdist + wheel and uploads to PyPI via trusted publishing (OIDC). It can also be triggered by hand from the Actions tab.
+- `release-please.yml` does not call `publish.yml` via `workflow_call`, because PyPI then rejects the upload's attestation: the attestation names `release-please.yml`, but the trusted publisher on PyPI is `publish.yml`.
+
+Pull requests are squash-merged, so the pull request title becomes the commit message on `main`. Use [Conventional Commits](https://www.conventionalcommits.org/) for it so release-please can pick the next version (`fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → major).

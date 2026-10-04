@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kipoiseq2"
+version = "0.0.0"
+description = "Sequence extractors and transforms for DNA and RNA sequence models"
+authors = [
+    { name = "Kipoi team", email = "avsec@in.tum.de" },
+]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+keywords = [
+    "model zoo",
+    "deep learning",
+    "computational biology",
+    "bioinformatics",
+    "genomics",
+]
+dependencies = [
+    "numpy",
+    "pyfaidx",
+]
+
+[project.optional-dependencies]
+# VCF reading (scan_vcf_variants, scan_vcf_genotypes) and variant matching
+ranges = [
+    "polars>=1.37.1",
+    "polars-bio>=0.31",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/gagneurlab/kipoiseq2"
+
+[dependency-groups]
+dev = [
+    "tox>=4",
+    "tox-uv",
+]
+test = [
+    "pytest>=8,<9",
+    "pytest-xdist",
+    "pytest-mock",
+    "pytest-cov",
+    "pytest-sugar",
+]
+lint = [
+    "ruff",
+    "mypy",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kipoiseq2"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",  # line-too-long
+    "F403",  # star imports used intentionally in package
+    "F405",  # may-be-undefined-from-star-import
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "SIM", "PLR", "F811", "F841"]
+"__init__.py" = ["F401"]
+
+[tool.tox]
+requires = ["tox>=4", "tox-uv"]
+env_list = ["format-check", "lints", "typecheck", "py3.12", "py3.13", "py3.14"]
+isolated_build = true
+
+[tool.tox.env_run_base]
+runner = "uv-venv-lock-runner"
+description = "run unit tests"
+dependency_groups = ["test"]
+extras = ["ranges"]
+commands = [["pytest", { replace = "posargs", default = ["tests"], extend = true }]]
+
+[tool.tox.env."format-check"]
+runner = "uv-venv-lock-runner"
+skip_install = true
+dependency_groups = ["lint"]
+commands = [["ruff", "format", "--check", "."]]
+
+[tool.tox.env."lints"]
+runner = "uv-venv-lock-runner"
+skip_install = true
+dependency_groups = ["lint"]
+commands = [["ruff", "check", "."]]
+
+[tool.tox.env."typecheck"]
+runner = "uv-venv-lock-runner"
+dependency_groups = ["lint"]
+extras = ["ranges"]
+commands = [["mypy", "src/kipoiseq2"]]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
+# test modules import file paths from tests/conftest.py
+pythonpath = ["tests"]

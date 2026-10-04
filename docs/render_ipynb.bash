@@ -23,9 +23,9 @@ for file in $(cat ipynb_pages.txt); do
     dir_out=sources/${DIR}/${file}_files
 
     # fix the paths for the original images
-    sed_replace '![img](../docs/theme_dir/img/' '![img](/kipoiseq/img/' $file_out
+    sed_replace '![img](../docs/theme_dir/img/' '![img](/kipoiseq2/img/' $file_out
     # prepend the original ipython notebook link
-    echo -e "Generated from [notebooks/${file}.ipynb](https://github.com/kipoi/kipoiseq/blob/master/notebooks/${file}.ipynb)\n$(cat ${file_out})" > ${file_out}
+    echo -e "Generated from [notebooks/${file}.ipynb](https://github.com/gagneurlab/kipoiseq2/blob/main/notebooks/${file}.ipynb)\n$(cat ${file_out})" > ${file_out}
 
     if [ -d "${dir_out}" ]; then
 
@@ -36,13 +36,13 @@ for file in $(cat ipynb_pages.txt); do
 	mv -f ${dir_out} theme_dir/img/ipynb/
 
 	# fix the path in the .md file
-	sed_replace '![png]('${file}'_files' '![png](/kipoiseq/img/ipynb/'${file}'_files' $file_out
-	sed_replace '![svg]('${file}'_files' '![svg](/kipoiseq/img/ipynb/'${file}'_files' $file_out
+	sed_replace '![png]('${file}'_files' '![png](/kipoiseq2/img/ipynb/'${file}'_files' $file_out
+	sed_replace '![svg]('${file}'_files' '![svg](/kipoiseq2/img/ipynb/'${file}'_files' $file_out
     fi
 done
 
-if [ -d "theme_dir/kipoiseq" ]; then
-    rm -r theme_dir/kipoiseq
+if [ -d "theme_dir/kipoiseq2" ]; then
+    rm -r theme_dir/kipoiseq2
 fi
-mkdir -p theme_dir/kipoiseq
-ln -sr theme_dir/img theme_dir/kipoiseq/img
+mkdir -p theme_dir/kipoiseq2
+ln -sr theme_dir/img theme_dir/kipoiseq2/img

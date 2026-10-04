@@ -1,160 +1,183 @@
+import polars as pl
 import pytest
-from conftest import vcf_file, sample_5kb_fasta_file, test_with_multiple_variants
-from kipoiseq.dataclasses import Variant, Interval
-from kipoiseq.extractors.vcf_query import NumberVariantQuery
-from kipoiseq.extractors.vcf import MultiSampleVCF
+from conftest import EDGE_CASE_VCF, test_with_multiple_variants, vcf_file
 
-fasta_file = sample_5kb_fasta_file
+from kipoiseq2.extractors.vcf import scan_vcf_genotypes, scan_vcf_variants
 
-intervals = [
-    Interval('chr1', 3, 10),
-    Interval('chr1', 4, 30),
-    Interval('chr1', 19, 30)
-]
+# The output of kipoiseq's MultiSampleVCF, which read VCF files with cyvcf2:
+# chrom, start, end, pos, ref and alt of the Variants it yielded.
+CYVCF2_VARIANTS = {
+    vcf_file: [
+        ("chr1", 3, 4, 4, "T", "C"),
+        ("chr1", 4, 5, 5, "A", "GA"),
+        ("chr1", 24, 28, 25, "AACG", "GA"),
+    ],
+    test_with_multiple_variants: [
+        ("chr1", 3, 4, 4, "T", "C"),
+        ("chr1", 3, 4, 4, "T", "A"),
+        ("chr1", 3, 4, 4, "T", "G"),
+        ("chr1", 4, 5, 5, "A", "GA"),
+        ("chr1", 4, 5, 5, "A", ""),
+        ("chr1", 11, 12, 12, "T", ""),
+        ("chr1", 24, 28, 25, "AACG", "GA"),
+    ],
+    "edge_case_vcf": [
+        ("chr1", 9, 10, 10, "A", "C"),
+        ("chr1", 9, 10, 10, "A", "G"),
+        ("chr1", 19, 23, 20, "ACGT", "<DEL>"),
+        ("chr1", 29, 30, 30, "T", ""),
+        ("chr2", 4, 6, 5, "TA", "T"),
+        ("chr2", 4, 6, 5, "TA", "TAA"),
+    ],
+}
 
-
-@pytest.fixture
-def multi_sample_vcf():
-    return MultiSampleVCF(vcf_file)
-
-
-def test_MultiSampleVCF__next__(multi_sample_vcf):
-    variant = next(multi_sample_vcf)
-    assert variant.chrom == 'chr1'
-    assert variant.pos == 4
-    assert variant.ref == 'T'
-    assert variant.alt == 'C'
-
-
-def test_MultiSampleVCF__iter__(multi_sample_vcf):
-    variant = list(multi_sample_vcf)[0]
-    assert variant.chrom == 'chr1'
-    assert variant.pos == 4
-    assert variant.ref == 'T'
-    assert variant.alt == 'C'
-
-
-def test_MultiSampleVCF_fetch_variant(multi_sample_vcf):
-    interval = Interval('chr1', 3, 5)
-    assert len(list(multi_sample_vcf.fetch_variants(interval))) == 2
-    assert len(list(multi_sample_vcf.fetch_variants(interval, 'NA00003'))) == 1
-    assert len(list(multi_sample_vcf.fetch_variants(interval, 'NA00001'))) == 0
-
-    interval = Interval('chr1', 7, 12)
-    assert len(list(multi_sample_vcf.fetch_variants(interval))) == 0
-    assert len(list(multi_sample_vcf.fetch_variants(interval, 'NA00003'))) == 0
-
-
-def test_MultiSampleVCF_query_variants(multi_sample_vcf):
-    vq = multi_sample_vcf.query_variants(intervals)
-    variants = list(vq)
-
-    assert len(variants) == 5
-    assert variants[0].pos == 4
-    assert variants[1].pos == 5
-
-    msvcf = MultiSampleVCF(test_with_multiple_variants)
-    vq = msvcf.query_variants([Interval('chr1', 3, 10)])
-    variants = list(vq)
-
-    assert len(variants) == 5
-    assert variants[0].ref == 'T'
-    assert variants[1].ref == 'T'
-    assert variants[2].ref == 'T'
-    assert variants[0].alt == 'C'
-    assert variants[1].alt == 'A'
-    assert variants[2].alt == 'G'
-    assert variants[4].alt == ''
-
-    vq = msvcf.query_variants([Interval('chr1', 11, 14)])
-    variants = list(vq)
-
-    assert len(variants) == 1
-    assert variants[0].ref == 'T'
-    assert variants[0].alt == ''
+# chrom, pos, ref, alt and sample of the samples that MultiSampleVCF.get_samples returned
+CYVCF2_CARRIERS = {
+    vcf_file: [
+        ("chr1", 4, "T", "C", "NA00003"),
+        ("chr1", 25, "AACG", "GA", "NA00002"),
+    ],
+    test_with_multiple_variants: [
+        ("chr1", 4, "T", "C", "NA00003"),
+        ("chr1", 4, "T", "A", "NA00003"),
+        ("chr1", 4, "T", "G", "NA00003"),
+        ("chr1", 25, "AACG", "GA", "NA00002"),
+    ],
+}
 
 
-def test_MultiSampleVCF_get_samples(multi_sample_vcf):
-    variants = list(multi_sample_vcf)
-    samples = multi_sample_vcf.get_samples(variants[0])
-    assert samples == {'NA00003': 3}
+@pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants])
+def test_scan_vcf_variants_equals_cyvcf2(path):
+    df = scan_vcf_variants(path).collect()
+    assert df.select("chrom", "start", "end", "pos", "ref", "alt").rows() == CYVCF2_VARIANTS[path]
 
 
-def test_MultiSampleVCF_get_variant(multi_sample_vcf):
-
-    variant = multi_sample_vcf.get_variant("chr1:4:T>C")
-    assert variant.chrom == 'chr1'
-    assert variant.pos == 4
-    assert variant.ref == 'T'
-    assert variant.alt == 'C'
-
-    variant = multi_sample_vcf.get_variant(Variant('chr1', 4, 'T', 'C'))
-    assert variant.chrom == 'chr1'
-    assert variant.pos == 4
-    assert variant.ref == 'T'
-    assert variant.alt == 'C'
-
-    with pytest.raises(KeyError):
-        multi_sample_vcf.get_variant("chr1:4:A>C")
-
-
-def test_MultiSampleVCF_get_variants(multi_sample_vcf):
-    variants = multi_sample_vcf.get_variants(["chr1:4:T>C"], intervals)
-    assert len(variants) == 1
-
-    variant = variants[0]
-    assert variant.chrom == 'chr1'
-    assert variant.pos == 4
-    assert variant.ref == 'T'
-    assert variant.alt == 'C'
-
-    variants = multi_sample_vcf.get_variants(["chr1:4:T>C", "chr1:25:AACG>GA"])
-    assert len(variants) == 2
-
-    variant = variants[0]
-    assert variant.chrom == 'chr1'
-    assert variant.pos == 4
-    assert variant.ref == 'T'
-    assert variant.alt == 'C'
-
-
-def test_MultiSampleVCF__regions_from_variants(multi_sample_vcf):
-    variants = [
-        Variant('chr1', 4, 'T', 'C'),
-        Variant('chr1', 25, 'AACG', 'GA'),
-        Variant('chr1', 55525, 'AACG', 'GA'),
-        Variant('chr10', 55525, 'AACG', 'GA')
-
+def test_scan_vcf_variants_edge_cases(edge_case_vcf):
+    df = scan_vcf_variants(edge_case_vcf).collect()
+    assert df.select("chrom", "start", "end", "pos", "ref", "alt").rows() == CYVCF2_VARIANTS["edge_case_vcf"]
+    # one row per ALT allele, without the ALT alleles that contain N or *
+    assert df.select("pos", "alt", "allele_idx").rows() == [
+        (10, "C", 1),
+        (10, "G", 2),
+        (20, "<DEL>", 1),
+        (30, "", 1),
+        (5, "T", 1),
+        (5, "TAA", 2),
     ]
-    regions = multi_sample_vcf._regions_from_variants(variants)
-
-    assert set(regions) == set([
-        Interval('chr1', 3, 25),
-        Interval('chr1', 55524, 55525),
-        Interval('chr10', 55524, 55525)
-    ])
-
-
-def test_MultiSampleVCF_VariantQueryable_to_vcf(tmpdir, multi_sample_vcf):
-    output_vcf_file = str(tmpdir / 'output.vcf')
-
-    multi_sample_vcf \
-        .query_variants(intervals) \
-        .filter_range(NumberVariantQuery(max_num=1)) \
-        .to_vcf(output_vcf_file)
-
-    vcf = MultiSampleVCF(output_vcf_file)
-    variants = list(vcf)
-    assert len(variants) == 1
-    assert variants[0].ref == 'AACG'
-    assert variants[0].alt == 'GA'
+    # end follows REF, not INFO/END=40
+    assert df.filter(pl.col("alt") == "<DEL>").select("start", "end").row(0) == (19, 23)
+    # a missing ID or FILTER is an empty string, and a missing QUAL is null
+    assert df.filter(pl.col("alt").is_in(["G", "<DEL>"])).select("id", "qual", "filter").rows() == [
+        ("rs1", 50.0, "PASS"),
+        ("", None, ""),
+    ]
 
 
-def test_batch_iter_vcf(multi_sample_vcf):
-    batchs = list(multi_sample_vcf.batch_iter(10))
-    assert sum(len(i) for i in batchs) == 3
+def test_scan_vcf_variants_columns():
+    lf = scan_vcf_variants(vcf_file, info_fields=["DP"])
+    assert lf.collect_schema() == pl.Schema(
+        {
+            "chrom": pl.String,
+            "start": pl.Int64,
+            "end": pl.Int64,
+            "pos": pl.Int64,
+            "id": pl.String,
+            "ref": pl.String,
+            "alt": pl.String,
+            "allele_idx": pl.Int64,
+            "qual": pl.Float64,
+            "filter": pl.String,
+            "DP": pl.Int32,
+        }
+    )
 
 
-def test_MultiSampleVCF_query_all(multi_sample_vcf):
-    variants = list(multi_sample_vcf.query_all())
-    assert len(variants) == 3
+def test_scan_vcf_variants_zero_based(edge_case_vcf):
+    # start and end do not depend on the coordinate system of polars-bio
+    variants = scan_vcf_variants(vcf_file, use_zero_based=False)
+    assert variants.collect().equals(scan_vcf_variants(vcf_file).collect())
+    assert variants.collect().select("start", "end", "pos").row(0) == (3, 4, 4)
+    # polars-bio range operations read the coordinate system from the metadata
+    assert variants.config_meta.get_metadata()["coordinate_system_zero_based"] is True
+    for carriers_only in (True, False):
+        genotypes = scan_vcf_genotypes(edge_case_vcf, carriers_only=carriers_only, use_zero_based=False)
+        assert genotypes.config_meta.get_metadata()["coordinate_system_zero_based"] is True
+        assert genotypes.collect().select("start", "end", "pos").row(0) == (9, 10, 10)
+
+
+@pytest.mark.parametrize("path", [vcf_file, test_with_multiple_variants])
+def test_scan_vcf_genotypes_equals_cyvcf2(path):
+    # these VCFs have one ALT allele per record, so carriers per record and per ALT allele are the same
+    df = scan_vcf_genotypes(path).collect()
+    assert df.select("chrom", "pos", "ref", "alt", "sample").rows() == CYVCF2_CARRIERS[path]
+
+
+def test_scan_vcf_genotypes_per_allele(edge_case_vcf):
+    df = scan_vcf_genotypes(edge_case_vcf).collect()
+    assert df.select("pos", "alt", "sample", "GT").rows() == [
+        (10, "C", "S2", "1|1"),
+        # 0/2 carries the second ALT allele only
+        (10, "G", "S1", "0/2"),
+        (20, "<DEL>", "S1", "0/1"),
+        (20, "<DEL>", "S2", "1/2"),
+        # haploid
+        (5, "T", "S1", "1"),
+        # the missing allele is ignored
+        (5, "T", "S3", ".|1"),
+        (5, "TAA", "S2", "3/2"),
+    ]
+    assert df["carrier"].all()
+
+
+def test_scan_vcf_genotypes_all_rows(edge_case_vcf):
+    df = scan_vcf_genotypes(edge_case_vcf, format_fields=["GQ", "AD"], carriers_only=False).collect()
+    assert df.columns == [
+        "chrom",
+        "start",
+        "end",
+        "pos",
+        "id",
+        "ref",
+        "alt",
+        "allele_idx",
+        "qual",
+        "filter",
+        "sample",
+        "GT",
+        "GQ",
+        "AD",
+        "carrier",
+    ]
+    # 6 ALT alleles times 3 samples
+    assert df.height == 18
+    assert df.filter(pl.col("pos") == 10).select("alt", "sample", "GT", "GQ", "AD", "carrier").rows() == [
+        ("C", "S1", "0/2", 30, [5, 0, 5], False),
+        ("C", "S2", "1|1", 20, [0, 8, 0], True),
+        ("C", "S3", "./.", None, None, False),
+        ("G", "S1", "0/2", 30, [5, 0, 5], True),
+        ("G", "S2", "1|1", 20, [0, 8, 0], False),
+        ("G", "S3", "./.", None, None, False),
+    ]
+    # a missing GT is not a carrier
+    assert df.filter((pl.col("pos") == 30) & (pl.col("sample") == "S3")).select("GT", "carrier").row(0) == (None, False)
+
+
+def test_scan_vcf_genotypes_samples(edge_case_vcf, tmp_path):
+    s2 = scan_vcf_genotypes(edge_case_vcf, samples=["S2"], format_fields=["GQ", "AD"], carriers_only=False).collect()
+    all_samples = scan_vcf_genotypes(edge_case_vcf, format_fields=["GQ", "AD"], carriers_only=False).collect()
+    assert s2.equals(all_samples.filter(pl.col("sample") == "S2"))
+
+    # polars-bio returns the FORMAT fields of a single-sample VCF as columns instead of a struct
+    lines = [line.split("\t") for line in EDGE_CASE_VCF.splitlines()]
+    single_sample_vcf = tmp_path / "single_sample.vcf"
+    single_sample_vcf.write_text("".join("\t".join(line[:9] + line[10:11]) + "\n" for line in lines))
+    single = scan_vcf_genotypes(str(single_sample_vcf), format_fields=["GQ", "AD"], carriers_only=False).collect()
+    assert single.equals(s2)
+
+
+def test_scan_vcf_genotypes_without_samples(tmp_path):
+    lines = [line.split("\t") for line in EDGE_CASE_VCF.splitlines() if not line.startswith("##FORMAT")]
+    sites_only_vcf = tmp_path / "sites_only.vcf"
+    sites_only_vcf.write_text("".join("\t".join(line[:8]) + "\n" for line in lines))
+    with pytest.raises(ValueError, match="no samples"):
+        scan_vcf_genotypes(str(sites_only_vcf))
