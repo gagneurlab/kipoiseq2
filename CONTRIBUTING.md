@@ -6,7 +6,7 @@ Contributions are welcome, and they are greatly appreciated! Every little bit he
 
 ### Report bugs
 
-Report bugs at <https://github.com/kipoi/kipoiseq2/issues>.
+Report bugs at <https://github.com/gagneurlab/kipoiseq2/issues>.
 
 If you are reporting a bug, please include:
 
@@ -28,7 +28,7 @@ kipoiseq2 could always use more documentation, whether as docstrings, in the REA
 
 ### Submit feedback
 
-The best way to send feedback is to file an issue at <https://github.com/kipoi/kipoiseq2/issues>.
+The best way to send feedback is to file an issue at <https://github.com/gagneurlab/kipoiseq2/issues>.
 
 If you are proposing a feature:
 
@@ -54,7 +54,7 @@ The project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
 ### Initial setup
 
 ```bash
-git clone git@github.com:kipoi/kipoiseq2.git
+git clone git@github.com:gagneurlab/kipoiseq2.git
 cd kipoiseq2
 
 # Create the conda env (provides Python + uv)

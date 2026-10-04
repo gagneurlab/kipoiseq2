@@ -25,7 +25,7 @@ for file in $(cat ipynb_pages.txt); do
     # fix the paths for the original images
     sed_replace '![img](../docs/theme_dir/img/' '![img](/kipoiseq2/img/' $file_out
     # prepend the original ipython notebook link
-    echo -e "Generated from [notebooks/${file}.ipynb](https://github.com/kipoi/kipoiseq2/blob/main/notebooks/${file}.ipynb)\n$(cat ${file_out})" > ${file_out}
+    echo -e "Generated from [notebooks/${file}.ipynb](https://github.com/gagneurlab/kipoiseq2/blob/main/notebooks/${file}.ipynb)\n$(cat ${file_out})" > ${file_out}
 
     if [ -d "${dir_out}" ]; then
 

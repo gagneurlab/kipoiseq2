@@ -1,6 +1,6 @@
 # kipoiseq2
 
-[![CI](https://github.com/kipoi/kipoiseq2/actions/workflows/ci.yml/badge.svg)](https://github.com/kipoi/kipoiseq2/actions/workflows/ci.yml)
+[![CI](https://github.com/gagneurlab/kipoiseq2/actions/workflows/ci.yml/badge.svg)](https://github.com/gagneurlab/kipoiseq2/actions/workflows/ci.yml)
 
 Sequence extractors and transforms for DNA sequence-based models.
 kipoiseq2 extracts reference and variant sequences from FASTA and VCF files and encodes them for model input, e.g. as one-hot arrays.
