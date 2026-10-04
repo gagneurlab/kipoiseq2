@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kipoiseq2"
-version = "0.0.0"
+version = "0.1.0"
 description = "Sequence extractors and transforms for DNA and RNA sequence models"
 authors = [
     { name = "Kipoi team", email = "avsec@in.tum.de" },
