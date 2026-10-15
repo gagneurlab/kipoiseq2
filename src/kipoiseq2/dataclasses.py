@@ -182,14 +182,19 @@ class Interval:
         return obj
 
     def center(self, use_strand=True):
-        """Compute the center of the interval"""
-        if use_strand:
-            add_offset = 0 if self.neg_strand else 1
-        else:
-            add_offset = 0
+        """Compute the center of the interval.
+
+        If ``start + end`` is odd, the center lies in the middle of a base.
+        Then the center is rounded towards the 3' end: up on "+" and "." intervals, and down on "-" intervals.
+
+        :param use_strand: if False, compute the center of the unstranded interval, which is rounded up on all strands
+        :returns: the 0-based center position
+        """
         delta = (self.end + self.start) % 2
         center = (self.end + self.start) // 2
-        return center + add_offset * delta
+        if use_strand and self.neg_strand:
+            return center
+        return center + delta
 
     def shift(self, x: int, use_strand: bool = True):
         """Shift the interval by x.
@@ -250,7 +255,17 @@ class Interval:
         return deepcopy(self)
 
     def slop(self, upstream=0, downstream=0, use_strand=True):
-        """Extend the interval on each strand"""
+        """Extend the interval upstream and downstream.
+
+        :param upstream: number of bases to add upstream. A negative value removes bases.
+        :param downstream: number of bases to add downstream. A negative value removes bases.
+        :param use_strand: if True, upstream and downstream follow the strand:
+            on a "-" interval, ``upstream`` moves ``end`` and ``downstream`` moves ``start``.
+            On "+" and "." intervals, and if False, ``upstream`` moves ``start`` and ``downstream`` moves ``end``.
+        :returns: a new interval
+        """
+        if use_strand and self.neg_strand:
+            upstream, downstream = downstream, upstream
         obj = self.copy()
         obj._start -= upstream
         obj._end += downstream
@@ -265,24 +280,33 @@ class Interval:
         return self.start >= 0 and self.end <= chrom_len
 
     def truncate(self, chrom_len=math.inf):
-        """Truncate the interval to become valid"""
-        if self.is_valid(chrom_len):
-            return self
-        else:
-            obj = self.copy()
-            obj._start = max(self._start, 0)
-            obj._end = min(self.end, chrom_len)
-            return obj
+        """Truncate the interval to become valid.
+
+        :param chrom_len: length of the chromosome
+        :returns: a new interval with ``start`` at least 0 and ``end`` at most ``chrom_len``
+        """
+        obj = self.copy()
+        obj._start = max(self.start, 0)
+        obj._end = min(self.end, chrom_len)
+        return obj
 
     def resize(self, width, use_strand=True):
+        """Resize the interval to ``width`` around its :meth:`center`.
+
+        If ``width`` is odd, the result has one more base upstream of the center than downstream.
+        Upstream is towards ``start`` on "+" and "." intervals, and towards ``end`` on "-" intervals.
+
+        :param width: width of the resized interval. If None, return a copy.
+        :param use_strand: if False, resize as an unstranded interval. The result keeps the strand.
+        :returns: a new interval
+        """
         obj = deepcopy(self)
 
         if width is None or self.width() == width:
             # no need to resize
             return obj
 
-        # without use_strand, resize as an unstranded interval
-        center = self.center() if use_strand else self.unstrand().center()
+        center = self.center(use_strand=use_strand)
         if self.neg_strand and use_strand:
             # negative strand
             obj._start = center - width // 2
@@ -300,9 +324,17 @@ class Interval:
         return self.width()
 
     def trim(self, i, j, use_strand=True):
-        if i == 0 and j == self.width():
-            return self
+        """Keep the bases ``i`` to ``j - 1`` of the interval.
+
+        :param i: 0-based position of the first base to keep
+        :param j: 0-based position after the last base to keep
+        :param use_strand: if True, count the positions from ``end`` on "-" intervals.
+            On "+" and "." intervals, and if False, count them from ``start``.
+        :returns: a new interval
+        """
         obj = self.copy()
+        if i == 0 and j == self.width():
+            return obj
         assert j > i
         if self.strand == "-" and use_strand:
             w = self.width()

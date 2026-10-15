@@ -150,3 +150,28 @@ def test_ResizeInterval():
 
     # desired output width
     assert ret_inter.end - ret_inter.start == ilen
+
+
+def test_resize_interval_center_use_strand():
+    assert resize_interval(Interval("chr1", 0, 11, strand="+"), 4) == Interval("chr1", 4, 8, strand="+")
+    assert resize_interval(Interval("chr1", 0, 11, strand="-"), 4) == Interval("chr1", 3, 7, strand="-")
+    assert resize_interval(Interval("chr1", 0, 11, strand="."), 4) == Interval("chr1", 4, 8, strand=".")
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_resize_interval_center_is_interval_resize(strand):
+    for start, end in [(0, 11), (0, 10), (3, 8)]:
+        for width in [1, 4, 5, 12, 13]:
+            interval = Interval("chr1", start, end, strand=strand)
+            assert resize_interval(interval, width) == interval.resize(width)
+            assert ResizeInterval(width)(interval) == interval.resize(width)
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_resize_interval_start_end_are_genomic(strand):
+    # "start" keeps the genomic start and "end" keeps the genomic end, also on "-" intervals
+    interval = Interval("chr1", 10, 20, strand=strand)
+    assert resize_interval(interval, 4, "start") == Interval("chr1", 10, 14, strand=strand)
+    assert resize_interval(interval, 4, "end") == Interval("chr1", 16, 20, strand=strand)
+    assert resize_interval(interval, 13, "start") == Interval("chr1", 10, 23, strand=strand)
+    assert resize_interval(interval, 13, "end") == Interval("chr1", 7, 20, strand=strand)

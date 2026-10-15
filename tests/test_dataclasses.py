@@ -185,11 +185,11 @@ def test_interval():
 
     i3 = i2.resize(11).shift(1)
     assert i3.center(use_strand=True) == 16
-    assert i3.center(use_strand=False) == 15
+    assert i3.center(use_strand=False) == 16
 
     i3 = i2.resize(11).shift(1)
     assert i3.center(use_strand=True) == 16
-    assert i3.center(use_strand=False) == 15
+    assert i3.center(use_strand=False) == 16
 
     i2 = interval.trim(1, 10)
     assert i2.start == 10 and i2.end == 19
@@ -228,3 +228,55 @@ def test_interval_resize_without_use_strand(strand):
             expected = Interval("chr1", start, end).resize(width)
             i2 = Interval("chr1", start, end, strand=strand).resize(width, use_strand=False)
             assert (i2.start, i2.end, i2.strand) == (expected.start, expected.end, strand)
+
+
+def test_interval_center_use_strand():
+    # a center in the middle of a base is rounded towards the 3' end
+    assert Interval("chr1", 0, 11, strand="+").center() == 6
+    assert Interval("chr1", 0, 11, strand="-").center() == 5
+    assert Interval("chr1", 0, 11, strand=".").center() == 6
+    assert Interval("chr1", 0, 10, strand="-").center() == 5
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_interval_center_without_use_strand(strand):
+    assert Interval("chr1", 0, 11, strand=strand).center(use_strand=False) == 6
+
+    # all strands give the center of an unstranded interval
+    for start, end in [(0, 11), (0, 10), (3, 8), (-3, 0)]:
+        expected = Interval("chr1", start, end).center()
+        assert Interval("chr1", start, end, strand=strand).center(use_strand=False) == expected
+
+
+def test_interval_slop_use_strand():
+    # upstream and downstream follow the strand
+    assert Interval("chr1", 10, 20, strand="+").slop(upstream=2, downstream=5) == Interval("chr1", 8, 25, strand="+")
+    assert Interval("chr1", 10, 20, strand="-").slop(upstream=2, downstream=5) == Interval("chr1", 5, 22, strand="-")
+    assert Interval("chr1", 10, 20, strand=".").slop(upstream=2, downstream=5) == Interval("chr1", 8, 25, strand=".")
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_interval_slop_without_use_strand(strand):
+    i2 = Interval("chr1", 10, 20, strand=strand).slop(upstream=2, downstream=5, use_strand=False)
+    assert i2 == Interval("chr1", 8, 25, strand=strand)
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        lambda i: i.trim(0, 10),
+        lambda i: i.truncate(chrom_len=20),
+        lambda i: i.resize(10),
+        lambda i: i.shift(0),
+        lambda i: i.slop(),
+    ],
+    ids=["trim", "truncate", "resize", "shift", "slop"],
+)
+def test_interval_methods_return_a_copy(method):
+    interval = Interval("chr1", 10, 20, strand="-", attrs={"gene": "A"})
+    # the method changes nothing here, but still returns a new interval
+    i2 = method(interval)
+    assert i2 == interval
+    assert i2 is not interval
+    i2.attrs["gene"] = "B"
+    assert interval.attrs["gene"] == "A"

@@ -147,23 +147,21 @@ def resize_interval(interval, width, anchor="center"):
 
     :param interval: an :class:`~kipoiseq2.dataclasses.Interval`. It is not modified.
     :param width: desired width of the output interval
-    :param anchor: str; which part of the sequence should be anchored. Choices: 'start', 'center', or 'end'
+    :param anchor: str; which part of the interval should be anchored. Choices: 'start', 'center', or 'end'.
+        'center' resizes with :meth:`Interval.resize <kipoiseq2.dataclasses.Interval.resize>`,
+        which rounds the center by the strand of the interval.
+        'start' keeps the genomic ``start`` and 'end' keeps the genomic ``end``, on all strands.
+    :returns: a new :class:`~kipoiseq2.dataclasses.Interval` of width ``width``
+    :raises Exception: if ``anchor`` is not 'start', 'center' or 'end'
     """
     if anchor == "start":
-        start = interval.start
-        end = interval.start + width
+        return interval.slop(downstream=width - interval.width(), use_strand=False)
     elif anchor == "end":
-        start = interval.end - width
-        end = interval.end
+        return interval.slop(upstream=width - interval.width(), use_strand=False)
     elif anchor == "center":
-        center = int((interval.start + interval.end) / 2)
-        half_len = int(width / 2)
-        start = center - half_len
-        end = center + half_len + width % 2
+        return interval.resize(width)
     else:
         raise Exception("Interval resizing anchor point can only be 'start', 'end' or 'center'")
-
-    return interval.slop(upstream=interval.start - start, downstream=end - interval.end)
 
 
 TRANSLATION_TABLE = {

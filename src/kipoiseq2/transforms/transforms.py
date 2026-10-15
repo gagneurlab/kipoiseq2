@@ -80,7 +80,12 @@ class SwapAxes:
 
 
 class ResizeInterval:
-    """Resize the interval"""
+    """Resize the interval with :func:`~kipoiseq2.transforms.functional.resize_interval`.
+
+    :param width: desired width of the output interval
+    :param anchor: which part of the interval should be anchored: 'start', 'center' or 'end'.
+        See :func:`~kipoiseq2.transforms.functional.resize_interval`.
+    """
 
     def __init__(self, width, anchor="center"):
         self.width = width

@@ -124,3 +124,16 @@ The matchers use polars instead of pyranges:
   `Encoder().one_hot(seq)` returns an array of shape `(len(seq), 4)`, `np.expand_dims(x, axis)` inserts an axis of length 1, and `np.swapaxes(x, axis1, axis2)` swaps two axes.
   For example, `ReorderedOneHot(alphabet_axis=0, dummy_axis=1)`, with the shape `(4, 1, len(seq))`, becomes `np.swapaxes(np.expand_dims(Encoder().one_hot(seq), 1), 0, 2)`.
   `ReorderedOneHot.get_output_shape` has no replacement.
+- `Interval.center(use_strand=False)` returns the center of the unstranded interval, so it rounds a center in the middle of a base up instead of down.
+  On all strands, the result grows by 1 for intervals with an odd `start + end`.
+  `Interval.center()` with the default `use_strand=True` is unchanged.
+- `resize_interval(interval, width)` with the default `anchor="center"`, and so `ResizeInterval`, returns `interval.resize(width)`.
+  On "+" and "." intervals, the result moves by one base if `interval.width()` and `width` differ in parity: towards `end` for an even `width`, and towards `start` for an odd `width`.
+  For example, `Interval("chr1", 0, 11, strand="+")` resized to width 4 gives 4-8 instead of 3-7.
+  "-" intervals give the same result as before.
+  This holds for `start + end >= 0`. For a negative `start + end`, the old code rounded the center towards zero, so more results change.
+  `anchor="start"` and `anchor="end"` are unchanged: they keep the genomic `start` or `end` on all strands.
+- `Interval.slop(upstream, downstream)` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
+  "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.
+- `Interval.trim` and `Interval.truncate` always return a new interval.
+  Before, they returned the input interval if nothing changed, so changing the `attrs` of the result changed the input.
