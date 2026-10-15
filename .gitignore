@@ -104,7 +104,6 @@ venv.bak/
 .mypy_cache/
 
 **/downloaded/**
-/docs/mkdocs.yml
 
 # genomics
 /*.fai
