@@ -7,8 +7,8 @@ __all__ = ["FastaStringExtractor"]
 class FastaStringExtractor(BaseExtractor):
     """Fasta file extractor
 
-    NOTE: The extractor is not thread-save.
-    If you with to use it with multiprocessing,
+    NOTE: The extractor is not thread-safe.
+    If you wish to use it with multiprocessing,
     create a new extractor object in each process.
 
     # Arguments

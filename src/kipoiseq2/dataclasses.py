@@ -117,9 +117,6 @@ class Interval:
     BED convention. In 1-based VCF or GTF positions, the interval covers
     `start + 1` to `end`.
 
-    All fields can be either a single values (str or int) or a
-    numpy array of values.
-
     # Arguments
         chrom: Chromosome
         start: 0-based start position (inclusive)

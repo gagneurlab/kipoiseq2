@@ -21,22 +21,21 @@ class Compose:
 
     # Arguments
 
-        transforms (list of ``Transform`` objects): list of transforms to compose.
+        transforms (list of callables): list of transforms to compose.
 
     Example:
-        >>> transforms.Compose([
-        >>>     transforms.CenterCrop(10),
-        >>>     transforms.ToTensor(),
-        >>> ])
+        >>> from kipoiseq2.transforms import Compose, DummyAxis, OneHot
+        >>> Compose([OneHot(), DummyAxis(0)])("ACGT").shape
+        (1, 4, 4)
     """
 
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, img):
+    def __call__(self, x):
         for t in self.transforms:
-            img = t(img)
-        return img
+            x = t(x)
+        return x
 
     def __repr__(self):
         format_string = self.__class__.__name__ + "("
@@ -66,7 +65,7 @@ class DummyAxis:
 class SwapAxes:
     """np.swapaxes wrapper
 
-    If any if the axis is None, do nothing.
+    If any of the axes is None, do nothing.
     """
 
     def __init__(self, axis1=None, axis2=None):
@@ -102,12 +101,10 @@ class OneHot:
 
     # Arguments
       alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-          Can either be a list or a string: 'ACGT' or ['A, 'C', 'G', 'T']
+          Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
       neutral_alphabet: which element to use
       neutral_value: value of the neutral element
       dtype: defines the numpy dtype of the returned array.
-      alphabet_axis: axis along which the alphabet runs (e.g. A,C,G,T for DNA)
-      dummy_axis: defines in which dimension a dummy axis should be added. None if no dummy axis is required.
     """
 
     def __init__(self, alphabet=DNA, neutral_alphabet="N", neutral_value=0.25, dtype=None):
@@ -143,7 +140,7 @@ class ReorderedOneHot:
 
     # Arguments
       alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-          Can either be a list or a string: 'ACGT' or ['A, 'C', 'G', 'T']
+          Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
       neutral_alphabet: (single string character) neutral element representing
       neutral_value: value of the neutral element
       dtype: defines the numpy dtype of the returned array.
@@ -244,7 +241,7 @@ class SplitSplicingSeq:
         'intron5prime' is the intron 5' of the exon, while 'intron3prime' is from the 3'.
 
     # Arguments
-        exon_cut_l: when extract exon feature, how many base pair to cut out at the begining of an exon
+        exon_cut_l: when extract exon feature, how many base pair to cut out at the beginning of an exon
         exon_cut_r: when extract exon feature, how many base pair to cut out at the end of an exon
            (cut out the part that is considered as acceptor site or donor site)
         intron5prime_cut: how many bp to cut out at the end of acceptor intron that consider as acceptor site
@@ -281,7 +278,7 @@ class SplitSplicingSeq:
         # Arguments
             x: a sequence to split
             intron5prime_len: 5' intronic sequence length to take.
-            intron3prime_len: 5' intronic sequence length to take.
+            intron3prime_len: 3' intronic sequence length to take.
         """
         lackl = self.acceptor_intron_len - intron5prime_len  # need to pad N if left seq not enough long
         if lackl >= 0:
