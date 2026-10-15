@@ -116,7 +116,9 @@ uv run pytest tests/test_1_extractors.py::test_name -x
 ## Documentation
 
 The docs at <https://gagneurlab.github.io/kipoiseq2/> are built with [Sphinx](https://www.sphinx-doc.org/) from the docstrings in `src/kipoiseq2` and from `README.md`, `MIGRATING.md` and `CHANGELOG.md`.
-The API pages in `docs/api/` list the modules with `automodule`, so a new module needs an entry there.
+The API pages in `docs/api/` are Markdown files. They list the modules with `automodule`, so a new module needs an entry there.
+Put the `automodule` directives in an `{eval-rst}` block.
+With MyST's native directive syntax, MyST parses the output of autodoc as Markdown: the build passes without warnings, but the page shows raw reStructuredText.
 
 Write docstrings in reStructuredText, with field lists for the parameters, the return value and the exceptions:
 
