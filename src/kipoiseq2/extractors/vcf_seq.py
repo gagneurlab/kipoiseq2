@@ -20,14 +20,9 @@ _COMPLEMENT = str.maketrans(
 def reverse_complement(seq: str) -> str:
     """Reverse complement a DNA sequence with IUPAC codes.
 
-    Args:
-      seq: DNA sequence. Upper and lower case are kept.
-
-    Returns:
-      The reverse complement of `seq`.
-
-    Raises:
-      ValueError: if `seq` contains a character without IUPAC complement.
+    :param seq: DNA sequence. Upper and lower case are kept.
+    :returns: The reverse complement of ``seq``.
+    :raises ValueError: if ``seq`` contains a character without IUPAC complement.
     """
     comp = seq.translate(_COMPLEMENT)
     if len(comp) != len(seq):
@@ -61,14 +56,13 @@ class Subsequence:
 
 class IntervalSeqBuilder(list):
     """
-    String builder for `Subsequence` and `Interval` objects.
+    String builder for ``Subsequence`` and :class:`~kipoiseq2.dataclasses.Interval` objects.
     """
 
     def restore(self, sequence: Subsequence):
-        """Replace every Interval in the builder by its part of `sequence`.
+        """Replace every Interval in the builder by its part of ``sequence``.
 
-        Args:
-          sequence: the reference sequence that covers all intervals
+        :param sequence: the reference sequence that covers all intervals
             in the builder.
         """
         for i, interval in enumerate(self):
@@ -90,28 +84,27 @@ class IntervalSeqBuilder(list):
         """
         Build the string from sequence objects.
 
-        Returns:
-          str: the final sequence.
+        :returns: str; the final sequence.
         """
         return "".join(self._concat())
 
 
 class VariantSeqExtractor(BaseExtractor):
+    """
+    Sequence extractor which allows to obtain the alternative sequence,
+    given some interval and variants inside this interval.
+
+    :param fasta_file: path to the fasta file (can be gzipped)
+    :param reference_sequence: extractor returning the reference sequence given some interval
+    :param use_strand: bool; if True, the extracted sequence
+        is reverse complemented in case interval.strand == "-"
+    """
+
     _ref_seq_extractor: BaseExtractor
 
     def __init__(
         self, fasta_file: Optional[str] = None, reference_sequence: Optional[BaseExtractor] = None, use_strand=True
     ):
-        """
-        Sequence extractor which allows to obtain the alternative sequence,
-        given some interval and variants inside this interval.
-
-        Args:
-            fasta_file: path to the fasta file (can be gzipped)
-            reference_sequence: extractor returning the reference sequence given some interval
-            use_strand (bool): if True, the extracted sequence
-                is reverse complemented in case interval.strand == "-"
-        """
         self._use_strand = use_strand
 
         if fasta_file is not None:
@@ -125,16 +118,14 @@ class VariantSeqExtractor(BaseExtractor):
 
     @property
     def fasta(self):
-        """Deprecated alias of `ref_seq_extractor`."""
+        """Deprecated alias of :attr:`ref_seq_extractor`."""
         warnings.warn("`fasta` is deprecated, use `ref_seq_extractor` instead", DeprecationWarning, stacklevel=2)
         return self._ref_seq_extractor
 
     @property
     def ref_seq_extractor(self) -> BaseExtractor:
         """
-
-        Returns:
-            The reference sequence extractor of this object
+        :returns: The reference sequence extractor of this object
         """
         return self._ref_seq_extractor
 
@@ -150,24 +141,22 @@ class VariantSeqExtractor(BaseExtractor):
         **kwargs,
     ):
         """
-        Args:
-            interval: Interval, the region of interest from
-                which to query the sequence. 0-based
-            variants: List[Variant]: variants overlapping the `interval`.
-                can also be indels. 1-based
-            anchor: absolution position w.r.t. the interval start. (0-based).
-                E.g. for an interval of `chr1:10-20` the anchor of 10 denotes
-                the point chr1:10 in the 0-based coordinate system.
-            fixed_len: if True, the return sequence will have the same length
-                as the `interval` (e.g. `interval.end - interval.start`)
-            use_strand (bool, optional): if True, the extracted sequence
-                is reverse complemented in case interval.strand == "-".
-                Overrides `self.use_strand`
-            chrom_len: length of the chromosome. If chrom_len == math.inf, the length of the chromosome is not checked.
-            is_padding: if True, the sequence is padded with 'N's if sequence can't extend to the fixed length,
-
-        Returns:
-            A single sequence (`str`) with all the variants applied.
+        :param interval: Interval; the region of interest from
+            which to query the sequence. 0-based
+        :param variants: List[Variant]; variants overlapping the ``interval``.
+            can also be indels. 1-based
+        :param anchor: absolution position w.r.t. the interval start. (0-based).
+            E.g. for an interval of ``chr1:10-20`` the anchor of 10 denotes
+            the point chr1:10 in the 0-based coordinate system.
+        :param fixed_len: if True, the return sequence will have the same length
+            as the ``interval`` (e.g. ``interval.end - interval.start``)
+        :param use_strand: bool, optional; if True, the extracted sequence
+            is reverse complemented in case interval.strand == "-".
+            Overrides ``self.use_strand``
+        :param chrom_len: length of the chromosome. If chrom_len == math.inf, the length of the chromosome is not
+            checked.
+        :param is_padding: if True, the sequence is padded with 'N's if sequence can't extend to the fixed length,
+        :returns: A single sequence (``str``) with all the variants applied.
         """
         # Preprocessing
         anchor = max(min(anchor, interval.end), interval.start)
@@ -233,7 +222,7 @@ class VariantSeqExtractor(BaseExtractor):
     @staticmethod
     def _variant_to_sequence(variants):
         """
-        Convert `Variant` objects to (REF, ALT) pairs of `Subsequence` objects.
+        Convert :class:`~kipoiseq2.dataclasses.Variant` objects to (REF, ALT) pairs of ``Subsequence`` objects.
         """
         for v in variants:
             ref = Subsequence(seq=v.ref, start=v.start, end=v.start + len(v.ref))

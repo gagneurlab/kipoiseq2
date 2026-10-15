@@ -7,15 +7,15 @@ __all__ = ["FastaStringExtractor"]
 class FastaStringExtractor(BaseExtractor):
     """Fasta file extractor
 
-    NOTE: The extractor is not thread-safe.
-    If you wish to use it with multiprocessing,
-    create a new extractor object in each process.
+    .. note::
+       The extractor is not thread-safe.
+       If you wish to use it with multiprocessing,
+       create a new extractor object in each process.
 
-    # Arguments
-      fasta_file (str): path to the fasta_file
-      use_strand (bool): if True, the extracted sequence
+    :param fasta_file: str; path to the fasta_file
+    :param use_strand: bool; if True, the extracted sequence
         is reverse complemented in case interval.strand == "-"
-      force_upper (bool): Force uppercase output
+    :param force_upper: bool; Force uppercase output
     """
 
     def __init__(self, fasta_file, use_strand=False, force_upper=False):
@@ -30,15 +30,12 @@ class FastaStringExtractor(BaseExtractor):
         """
         Returns the FASTA sequence in some given interval as string
 
-        Args:
-            interval: the interval to query
-            use_strand (bool, optional): if True, the extracted sequence
-                is reverse complemented in case interval.strand == "-".
-                Overrides `self.use_strand`
-            **kwargs:
-
-        Returns:
-            sequence of requested interval
+        :param interval: the interval to query
+        :param use_strand: bool, optional; if True, the extracted sequence
+            is reverse complemented in case interval.strand == "-".
+            Overrides ``self.use_strand``
+        :param ``**kwargs``:
+        :returns: sequence of requested interval
 
         """
         # reverse-complement seq the negative strand

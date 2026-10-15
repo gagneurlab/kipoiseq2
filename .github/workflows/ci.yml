@@ -69,21 +69,43 @@ jobs:
       - name: Run tests
         run: uv run tox -e py${{ matrix.python-version }}
 
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install project dependencies
+        run: uv sync --all-groups
+
+      - name: Build docs
+        run: uv run tox -e docs
+
   # Aggregator job: a single, stable check-run name to use as the required
   # status check in branch protection. Stays valid even if the matrix or the
   # individual job names change.
   ci:
     name: CI
-    needs: [quality-checks, test]
+    needs: [quality-checks, test, docs]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Verify no upstream job failed
         run: |
           # Fail only on failure/cancelled. A skipped job is allowed
-          for result in "${{ needs.quality-checks.result }}" "${{ needs.test.result }}"; do
+          for result in "${{ needs.quality-checks.result }}" "${{ needs.test.result }}" "${{ needs.docs.result }}"; do
             if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
-              echo "An upstream job did not pass: quality-checks=${{ needs.quality-checks.result }} test=${{ needs.test.result }}"
+              echo "An upstream job did not pass: quality-checks=${{ needs.quality-checks.result }} test=${{ needs.test.result }} docs=${{ needs.docs.result }}"
               exit 1
             fi
           done

@@ -81,3 +81,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
         run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG_NAME"
+
+  docs:
+    name: Start docs.yml
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      # Events from GITHUB_TOKEN do not start other workflows, so dispatch
+      # docs.yml. Unlike publish.yml, docs.yml runs on main and checks out the
+      # tag from its ref input, because the github-pages environment allows
+      # deployments only from the default branch.
+      - name: Start docs.yml for the release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main -f ref="$TAG_NAME"

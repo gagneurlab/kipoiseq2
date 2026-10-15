@@ -19,14 +19,13 @@ __all__ = [
 class Compose:
     """Composes several transforms together.
 
-    # Arguments
-
-        transforms (list of callables): list of transforms to compose.
+    :param transforms: list of callables; list of transforms to compose.
 
     Example:
-        >>> from kipoiseq2.transforms import Compose, DummyAxis, OneHot
-        >>> Compose([OneHot(), DummyAxis(0)])("ACGT").shape
-        (1, 4, 4)
+
+    >>> from kipoiseq2.transforms import Compose, DummyAxis, OneHot
+    >>> Compose([OneHot(), DummyAxis(0)])("ACGT").shape
+    (1, 4, 4)
     """
 
     def __init__(self, transforms):
@@ -99,12 +98,11 @@ class ResizeInterval:
 class OneHot:
     """One-hot encode the sequence
 
-    # Arguments
-      alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-          Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
-      neutral_alphabet: which element to use
-      neutral_value: value of the neutral element
-      dtype: defines the numpy dtype of the returned array.
+    :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
+        Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
+    :param neutral_alphabet: which element to use
+    :param neutral_value: value of the neutral element
+    :param dtype: defines the numpy dtype of the returned array.
     """
 
     def __init__(self, alphabet=DNA, neutral_alphabet="N", neutral_value=0.25, dtype=None):
@@ -138,19 +136,19 @@ class ReorderedOneHot:
     """Flexible one-hot encoding class that can account for
     many different one-hot encoding formats.
 
-    # Arguments
-      alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-          Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
-      neutral_alphabet: (single string character) neutral element representing
-      neutral_value: value of the neutral element
-      dtype: defines the numpy dtype of the returned array.
-      alphabet_axis: axis along which the alphabet runs (e.g. A,C,G,T for DNA)
-      dummy_axis: defines in which dimension a dummy axis should be added. None if no dummy axis is required.
+    :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
+        Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
+    :param neutral_alphabet: (single string character) neutral element representing
+    :param neutral_value: value of the neutral element
+    :param dtype: defines the numpy dtype of the returned array.
+    :param alphabet_axis: axis along which the alphabet runs (e.g. A,C,G,T for DNA)
+    :param dummy_axis: defines in which dimension a dummy axis should be added. None if no dummy axis is required.
 
-    Examples (`None` = sequence axis):
-      - `(None, 4)`: default
-      - `(4, None)`: `alphabet_axis=0`
-      - `(4, 1, None)`: `alphabet_axis=0, dummy_axis=1`
+    Examples (``None`` = sequence axis):
+
+    - ``(None, 4)``: default
+    - ``(4, None)``: ``alphabet_axis=0``
+    - ``(4, 1, None)``: ``alphabet_axis=0, dummy_axis=1``
     """
 
     def __init__(
@@ -237,19 +235,18 @@ class ReorderedOneHot:
 
 class SplitSplicingSeq:
     """Split returned splice sequence (exon with flanking intron) to required format.
-        It splits into ['intron5prime', 'acceptor', 'exon', 'donor', 'intron3prime'].
-        'intron5prime' is the intron 5' of the exon, while 'intron3prime' is from the 3'.
+    It splits into ['intron5prime', 'acceptor', 'exon', 'donor', 'intron3prime'].
+    'intron5prime' is the intron 5' of the exon, while 'intron3prime' is from the 3'.
 
-    # Arguments
-        exon_cut_l: when extract exon feature, how many base pair to cut out at the beginning of an exon
-        exon_cut_r: when extract exon feature, how many base pair to cut out at the end of an exon
-           (cut out the part that is considered as acceptor site or donor site)
-        intron5prime_cut: how many bp to cut out at the end of acceptor intron that consider as acceptor site
-        intron3prime_cut: how many bp to cut out at the end of donor intron that consider as donor site
-        acceptor_intron_len: what length in acceptor intron to consider for acceptor site model
-        acceptor_exon_len: what length in acceptor exon to consider for acceptor site model
-        donor_intron_len: what length in donor intron to consider for donor site model
-        donor_exon_len: what length in donor exon to consider for donor site model
+    :param exon_cut_l: when extract exon feature, how many base pair to cut out at the beginning of an exon
+    :param exon_cut_r: when extract exon feature, how many base pair to cut out at the end of an exon
+        (cut out the part that is considered as acceptor site or donor site)
+    :param intron5prime_cut: how many bp to cut out at the end of acceptor intron that consider as acceptor site
+    :param intron3prime_cut: how many bp to cut out at the end of donor intron that consider as donor site
+    :param acceptor_intron_len: what length in acceptor intron to consider for acceptor site model
+    :param acceptor_exon_len: what length in acceptor exon to consider for acceptor site model
+    :param donor_intron_len: what length in donor intron to consider for donor site model
+    :param donor_exon_len: what length in donor exon to consider for donor site model
     """
 
     def __init__(
@@ -275,10 +272,9 @@ class SplitSplicingSeq:
 
     def __call__(self, x, intron5prime_len, intron3prime_len):
         """
-        # Arguments
-            x: a sequence to split
-            intron5prime_len: 5' intronic sequence length to take.
-            intron3prime_len: 3' intronic sequence length to take.
+        :param x: a sequence to split
+        :param intron5prime_len: 5' intronic sequence length to take.
+        :param intron3prime_len: 3' intronic sequence length to take.
         """
         lackl = self.acceptor_intron_len - intron5prime_len  # need to pad N if left seq not enough long
         if lackl >= 0:

@@ -1,4 +1,4 @@
-"""Import polars and polars-bio, the optional dependencies of the `ranges` extra."""
+"""Import polars and polars-bio, the optional dependencies of the ``ranges`` extra."""
 
 
 def _import_polars():

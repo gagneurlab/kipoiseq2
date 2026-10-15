@@ -6,6 +6,25 @@ from typing import Optional
 
 
 class Variant:
+    """Variant container.
+
+    See also VCF file definition: http://samtools.github.io/hts-specs/VCFv4.3.pdf
+
+    .. note::
+       this class doesn't hold the genotype information.
+
+    :param chrom: CHROM field in the VCF
+    :param pos: POS field in the VCF
+    :param ref: REF field in the VCF
+    :param alt: ALT field in the VCF
+    :param id: ID field in the VCF
+    :param qual: QUAL field in the VCF
+    :param filter: FILTER field in the VCF
+    :param info: INFO field in the VCF
+    :param source: reference to the original source object from which this
+        Variant object was created
+    """
+
     def __init__(
         self,
         chrom: str,
@@ -18,23 +37,6 @@ class Variant:
         info: Optional[dict] = None,
         source=None,
     ):
-        """Variant container.
-
-        See also VCF file definition: http://samtools.github.io/hts-specs/VCFv4.3.pdf
-        Note: this class doesn't hold the genotype information.
-
-        Args:
-          chrom: CHROM field in the VCF
-          pos: POS field in the VCF
-          ref: REF field in the VCF
-          alt: ALT field in the VCF
-          id: ID field in the VCF
-          qual: QUAL field in the VCF
-          filter: FILTER field in the VCF
-          info: INFO field in the VCF
-          source: reference to the original source object from which this
-            Variant object was created
-        """
         # main 4 attributes
         # these should be immutable by default to not
         # run into any strange issues downstream.
@@ -79,7 +81,7 @@ class Variant:
 
     @property
     def end(self):
-        """0-based, exclusive variant end position: `start + len(ref)`.
+        """0-based, exclusive variant end position: ``start + len(ref)``.
 
         This equals the 1-based position of the last REF base.
         """
@@ -113,18 +115,17 @@ class Interval:
     """Container for genomic interval(s)
 
     Coordinates are 0-based, half-open: the interval covers the bases
-    `start` to `end - 1`, and its width is `end - start`. This is the
+    ``start`` to ``end - 1``, and its width is ``end - start``. This is the
     BED convention. In 1-based VCF or GTF positions, the interval covers
-    `start + 1` to `end`.
+    ``start + 1`` to ``end``.
 
-    # Arguments
-        chrom: Chromosome
-        start: 0-based start position (inclusive)
-        end: 0-based end position (exclusive)
-        name: interval name
-        score: interval score
-        strand: interval strand ("+", "-" or "." for unknown strand)
-        attrs: additional attributes provided as a dictionary
+    :param chrom: Chromosome
+    :param start: 0-based start position (inclusive)
+    :param end: 0-based end position (exclusive)
+    :param name: interval name
+    :param score: interval score
+    :param strand: interval strand ("+", "-" or "." for unknown strand)
+    :param attrs: additional attributes provided as a dictionary
     """
 
     def __init__(
@@ -193,16 +194,14 @@ class Interval:
     def shift(self, x: int, use_strand: bool = True):
         """Shift the interval by x.
 
-        Args:
-          x: shift amount
-          use_strand (bool)
-
-
         This will perform:
         (chrom, start + x, end + x)
 
         If the strand is negative and use_strand is True, it will return:
         (chrom, start - x, end - x)
+
+        :param x: shift amount
+        :param use_strand:
         """
         obj = self.copy()
         if use_strand and self.neg_strand:
@@ -260,9 +259,8 @@ class Interval:
     def is_valid(self, chrom_len=math.inf):
         """Check that the interval lies within [0, chrom_len).
 
-        Args:
-          chrom_len: length of the chromosome. An interval may end at
-            `chrom_len`, because the end is exclusive.
+        :param chrom_len: length of the chromosome. An interval may end at
+            ``chrom_len``, because the end is exclusive.
         """
         return self.start >= 0 and self.end <= chrom_len
 

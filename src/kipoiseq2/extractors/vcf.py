@@ -1,9 +1,9 @@
 """Read VCF files as polars tables.
 
-`scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame,
-with one row per ALT allele. `scan_vcf_genotypes` adds one row per sample,
+:func:`scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame,
+with one row per ALT allele. :func:`scan_vcf_genotypes` adds one row per sample,
 with the FORMAT fields of the sample and whether it carries the ALT allele.
-Both need the `ranges` extra (polars and polars-bio).
+Both need the ``ranges`` extra (polars and polars-bio).
 """
 
 from __future__ import annotations
@@ -25,27 +25,24 @@ _SCAN_VCF_COLUMNS = ("chrom", "start", "end", "id", "ref", "alt", "qual", "filte
 def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
     """Read the variants of a VCF file as a polars LazyFrame, with one row per ALT allele.
 
-    The file is read lazily with `polars_bio.scan_vcf`. A record with
+    The file is read lazily with ``polars_bio.scan_vcf``. A record with
     several ALT alleles gives one row per ALT allele. ALT alleles that
-    contain `N` or `*` are dropped, as in kipoiseq's `MultiSampleVCF`. An
-    ALT of `.` gives an empty alt.
+    contain ``N`` or ``*`` are dropped, as in kipoiseq's ``MultiSampleVCF``. An
+    ALT of ``.`` gives an empty alt.
 
-    Args:
-      path: path of the VCF file.
-      **scan_vcf_kwargs: keyword arguments of `polars_bio.scan_vcf`, e.g.
-        `info_fields=["AF"]`. They override the defaults
-        `use_zero_based=True, info_fields=[], format_fields=[]`.
-
-    Returns:
-      LazyFrame with the columns chrom, start (`pos - 1`), end
-      (`start + len(ref)`), pos (the 1-based VCF POS), id, ref, alt,
-      allele_idx (the 1-based index of the ALT allele in the record), qual,
-      filter and the requested INFO and FORMAT fields. start and end ignore
-      INFO/END. polars-bio gives a missing ID or FILTER (`.`) as an empty
-      string and a missing QUAL as null. Several FILTER values stay joined
-      with `;`, e.g. "q10;s50". A field with one value per ALT allele
-      (Number=A) keeps all values of the record, so select the value of the
-      row with `pl.col("AF").list.get(pl.col("allele_idx") - 1)`.
+    :param path: path of the VCF file.
+    :param ``**scan_vcf_kwargs``: keyword arguments of ``polars_bio.scan_vcf``, e.g.
+        ``info_fields=["AF"]``. They override the defaults
+        ``use_zero_based=True, info_fields=[], format_fields=[]``.
+    :returns: LazyFrame with the columns chrom, start (``pos - 1``), end
+        (``start + len(ref)``), pos (the 1-based VCF POS), id, ref, alt,
+        allele_idx (the 1-based index of the ALT allele in the record), qual,
+        filter and the requested INFO and FORMAT fields. start and end ignore
+        INFO/END. polars-bio gives a missing ID or FILTER (``.``) as an empty
+        string and a missing QUAL as null. Several FILTER values stay joined
+        with ``;``, e.g. "q10;s50". A field with one value per ALT allele
+        (Number=A) keeps all values of the record, so select the value of the
+        row with ``pl.col("AF").list.get(pl.col("allele_idx") - 1)``.
     """
     pl, pb = _import_polars()
     scan = pb.scan_vcf(str(path), **{"use_zero_based": True, "info_fields": [], "format_fields": [], **scan_vcf_kwargs})
@@ -81,22 +78,19 @@ def scan_vcf_genotypes(
     """Read the genotypes of a VCF file as a polars LazyFrame, with one row per ALT allele and sample.
 
     A sample carries an ALT allele if its GT contains the allele_idx of the
-    row. GT may be haploid or phased, and missing alleles (`.`) are ignored.
+    row. GT may be haploid or phased, and missing alleles (``.``) are ignored.
     So a sample with GT 0/2 carries the second ALT allele but not the first
     one, and a sample with GT ./1 carries the first ALT allele.
 
-    Args:
-      path: path of the VCF file.
-      samples: names of the samples to read. The default reads all samples.
-      format_fields: FORMAT fields to read. GT is always read.
-      carriers_only: keep only the rows where the sample carries the ALT allele.
-      **scan_vcf_kwargs: more keyword arguments of `polars_bio.scan_vcf`,
-        as in `scan_vcf_variants`.
-
-    Returns:
-      LazyFrame with the columns of `scan_vcf_variants`, then sample, GT,
-      the other FORMAT fields with the value of the sample, and carrier.
-      FORMAT fields with several values per sample, such as AD, are lists.
+    :param path: path of the VCF file.
+    :param samples: names of the samples to read. The default reads all samples.
+    :param format_fields: FORMAT fields to read. GT is always read.
+    :param carriers_only: keep only the rows where the sample carries the ALT allele.
+    :param ``**scan_vcf_kwargs``: more keyword arguments of ``polars_bio.scan_vcf``,
+        as in :func:`scan_vcf_variants`.
+    :returns: LazyFrame with the columns of :func:`scan_vcf_variants`, then sample, GT,
+        the other FORMAT fields with the value of the sample, and carrier.
+        FORMAT fields with several values per sample, such as AD, are lists.
     """
     pl, _ = _import_polars()
     fields = ["GT", *(f for f in format_fields if f != "GT")]
