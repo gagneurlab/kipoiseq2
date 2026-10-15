@@ -86,7 +86,10 @@ class Variant:
         return self.start + len(self.ref)
 
     def __eq__(self, obj):
-        return self.chrom == obj.chrom and self.pos == obj.pos and self.ref == obj.ref and self.alt == obj.alt
+        try:
+            return self.chrom == obj.chrom and self.pos == obj.pos and self.ref == obj.ref and self.alt == obj.alt
+        except AttributeError:
+            return NotImplemented
 
     def __hash__(self):
         return hash((self.chrom, self.pos, self.ref, self.alt))
@@ -220,7 +223,15 @@ class Interval:
         return obj
 
     def __eq__(self, obj):
-        return self.chrom == obj.chrom and self.start == obj.start and self.end == obj.end and self.strand == obj.strand
+        try:
+            return (
+                self.chrom == obj.chrom
+                and self.start == obj.start
+                and self.end == obj.end
+                and self.strand == obj.strand
+            )
+        except AttributeError:
+            return NotImplemented
 
     def __hash__(self):
         return hash((self.chrom, self.start, self.end, self.strand))

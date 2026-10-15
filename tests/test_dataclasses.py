@@ -13,6 +13,8 @@ Tests to perform:
 - shift, swapt_strand, trim, etc
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from kipoiseq2.dataclasses import Interval, Variant
@@ -64,6 +66,20 @@ def test_variant():
     v.source = 2
 
     assert isinstance(Variant("chr1", "10", "C", "T").pos, int)
+
+
+@pytest.mark.parametrize("other", ["chr1:10:C>T", None, 1, Interval("chr1", 9, 10)])
+def test_variant_eq_other_types(other):
+    v = Variant("chr1", 10, "C", "T")
+    assert not v == other
+    assert v != other
+
+
+def test_variant_eq_same_attributes():
+    # objects with the same attributes, e.g. a kipoiseq Variant, compare by attributes
+    v = Variant("chr1", 10, "C", "T")
+    assert v == SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="T")
+    assert v != SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="G")
 
 
 def test_interval():
@@ -180,6 +196,19 @@ def test_interval():
 
     i2 = interval.trim(1, 10, use_strand=False)
     assert i2.start == 11 and i2.end == 20
+
+
+@pytest.mark.parametrize("other", ["chr1:10-20:-", None, 1, Variant("chr1", 11, "C", "T")])
+def test_interval_eq_other_types(other):
+    interval = Interval("chr1", 10, 20, strand="-")
+    assert not interval == other
+    assert interval != other
+
+
+def test_interval_eq_same_attributes():
+    interval = Interval("chr1", 10, 20, strand="-")
+    assert interval == SimpleNamespace(chrom="chr1", start=10, end=20, strand="-")
+    assert interval != SimpleNamespace(chrom="chr1", start=10, end=20, strand="+")
 
 
 def test_interval_resize_use_strand():
