@@ -133,6 +133,21 @@ def one_hot_dna(
 
 
 def pad(seq, length, value="N", anchor="center"):
+    """Pad a sequence to a fixed length
+
+    # Arguments
+        seq: str or list of chars
+            Sequence to pad
+        length: int; Final length of the sequence. Must be at least `len(seq)`.
+        value: Neutral element to pad the sequence with. Can be `str` or `list`, of the same type as `seq`.
+            If `value` has several elements, it is repeated and cut to the pad length on each side,
+            e.g. `pad("A", 4, value="NM", anchor="end")` returns `"NMNA"`.
+        anchor: character; 'start', 'end' or 'center'
+            To which end to anchor the sequence when padding.
+
+    # Returns
+        Sequence of length `length`, of the same type as `seq`
+    """
     seq_len = len(seq)
     assert length >= seq_len
     if anchor == "end":
@@ -147,11 +162,10 @@ def pad(seq, length, value="N", anchor="center"):
     else:
         raise ValueError("anchor can be of: end, start or center")
 
-    # normalize for the length
-    n_left = n_left // len(value)
-    n_right = n_right // len(value)
+    # repeat value often enough and cut it to the pad length on each side
+    padding = value * (max(n_left, n_right) // len(value) + 1)
 
-    return value * n_left + seq + value * n_right
+    return padding[:n_left] + seq + padding[:n_right]
 
 
 def trim(seq, length, anchor="center"):
@@ -188,6 +202,7 @@ def fixed_len(seq, length, anchor="center", value="N"):
         anchor: character; 'start', 'end' or 'center'
             To which end to anchor the sequence when trimming/padding. See examples below.
         value: Neutral element to pad the sequence with. Can be `str` or `list`, of the same type as `seq`.
+            If `value` has several elements, it is repeated and cut to the pad length on each side (see `pad`).
 
     # Returns
         Sequence of length `length`, of the same type as `seq`
