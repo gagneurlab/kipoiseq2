@@ -58,6 +58,11 @@ def test_SplitSplicingSeq():
     assert splited["donor"] == "AGAGT"
     assert splited["intron3prime"] == "CC"
 
+    # no AG before the exon and no GT after it
+    with pytest.warns(UserWarning) as record:
+        split("TAACCGTAGTAGACCCCC", 5, 5)
+    assert [str(w.message) for w in record] == ["Non-GT donor", "Non-AG acceptor"]
+
 
 def test_ResizeInterval():
     pass

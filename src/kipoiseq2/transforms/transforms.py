@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 
 from kipoiseq2.transforms import functional as F
@@ -296,12 +298,10 @@ class SplitSplicingSeq:
         donor = x[(-intron3prime_len - self.donor_exon_len) : (-intron3prime_len + self.donor_intron_len)]
         intron3prime = x[-intron3prime_len + self.intron3prime_cut :]
 
-        import warnings
-
         if donor[self.donor_exon_len : self.donor_exon_len + 2] != "GT":
-            warnings.warn("None GT donor", UserWarning)
+            warnings.warn("Non-GT donor", UserWarning)
         if acceptor[self.acceptor_intron_len - 2 : self.acceptor_intron_len] != "AG":
-            warnings.warn("None AG donor", UserWarning)
+            warnings.warn("Non-AG acceptor", UserWarning)
         if len(exon) == 0:
             exon = "N"
 
