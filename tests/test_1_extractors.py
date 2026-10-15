@@ -1,3 +1,6 @@
+import gc
+import sys
+
 import pytest
 
 from kipoiseq2.dataclasses import Interval
@@ -38,3 +41,13 @@ def test_base_extractor_extract_is_abstract():
         BaseExtractor()
     with pytest.raises(TypeError, match="extract"):
         NoExtract()
+
+
+def test_fasta_extractor_missing_file(monkeypatch):
+    unraisable = []
+    monkeypatch.setattr(sys, "unraisablehook", unraisable.append)
+    with pytest.raises(OSError):
+        FastaStringExtractor("tests/data/missing.fa")
+    gc.collect()
+    # __del__ calls close() on the half-initialized extractor
+    assert unraisable == []

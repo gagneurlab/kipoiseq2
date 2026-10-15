@@ -55,7 +55,9 @@ class FastaStringExtractor(BaseExtractor):
         return seq
 
     def close(self):
-        return self.fasta.close()
+        # self.fasta is missing if __init__ failed, e.g. for a missing file
+        if hasattr(self, "fasta"):
+            return self.fasta.close()
 
 
 # class BigWigExtractor(BaseExtractor):
