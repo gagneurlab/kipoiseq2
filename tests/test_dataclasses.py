@@ -180,3 +180,22 @@ def test_interval():
 
     i2 = interval.trim(1, 10, use_strand=False)
     assert i2.start == 11 and i2.end == 20
+
+
+def test_interval_resize_use_strand():
+    assert Interval("chr1", 0, 11, strand="+").resize(4) == Interval("chr1", 4, 8, strand="+")
+    assert Interval("chr1", 0, 11, strand="-").resize(4) == Interval("chr1", 3, 7, strand="-")
+    assert Interval("chr1", 0, 11, strand=".").resize(4) == Interval("chr1", 4, 8, strand=".")
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_interval_resize_without_use_strand(strand):
+    i2 = Interval("chr1", 0, 11, strand=strand).resize(4, use_strand=False)
+    assert i2 == Interval("chr1", 4, 8, strand=strand)
+
+    # all strands give the result of an unstranded interval
+    for start, end in [(0, 11), (0, 10), (3, 8)]:
+        for width in [1, 4, 5, 12, 13]:
+            expected = Interval("chr1", start, end).resize(width)
+            i2 = Interval("chr1", start, end, strand=strand).resize(width, use_strand=False)
+            assert (i2.start, i2.end, i2.strand) == (expected.start, expected.end, strand)

@@ -275,14 +275,16 @@ class Interval:
             # no need to resize
             return obj
 
+        # without use_strand, resize as an unstranded interval
+        center = self.center() if use_strand else self.unstrand().center()
         if self.neg_strand and use_strand:
             # negative strand
-            obj._start = self.center() - width // 2
-            obj._end = self.center() + width // 2 + width % 2
+            obj._start = center - width // 2
+            obj._end = center + width // 2 + width % 2
         else:
             # positive strand
-            obj._start = self.center() - width // 2 - width % 2
-            obj._end = self.center() + width // 2
+            obj._start = center - width // 2 - width % 2
+            obj._end = center + width // 2
         return obj
 
     def width(self):
