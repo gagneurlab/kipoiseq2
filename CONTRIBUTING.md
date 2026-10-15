@@ -61,8 +61,9 @@ cd kipoiseq2
 micromamba env create -f environment-dev.yml
 micromamba activate kipoiseq2
 
-# Install all dependency groups (runtime + dev + test + lint) into a uv-managed venv
-uv sync --all-groups
+# Install all dependency groups (runtime + dev + test + lint + docs) into a uv-managed venv
+# --all-extras adds the ranges extra (polars, polars-bio), which the VCF tests need
+uv sync --all-groups --all-extras
 ```
 
 All subsequent commands assume the env is activated and `uv` is on `PATH`.
