@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 
 from kipoiseq2.transforms import functional as F
-from kipoiseq2.utils import DNA, parse_alphabet, parse_dtype
+from kipoiseq2.utils import DNA, parse_dtype
 
 __all__ = [
     "Compose",
@@ -103,22 +103,23 @@ class OneHot:
     To encode IUPAC codes such as ``R`` like ``N``, add them to ``neutral_alphabet``.
 
     :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-        Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
-    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column
+        A list or tuple of letters, e.g. ``list("ACGT")`` or ``["A", "C", "G", "T"]``
+    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column, as a list or tuple
     :param neutral_value: value of the neutral element
     :param dtype: defines the numpy dtype of the returned array.
+    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
     """
 
-    def __init__(self, alphabet=DNA, neutral_alphabet="N", neutral_value=0.25, dtype=None):
+    def __init__(self, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
+        F._check_letters(alphabet, "alphabet")
+        F._check_letters(neutral_alphabet, "neutral_alphabet")
         self.alphabet = alphabet
-        if isinstance(neutral_alphabet, str):
-            neutral_alphabet = [neutral_alphabet]
         self.neutral_alphabet = neutral_alphabet
         self.neutral_value = neutral_value
         self.dtype = dtype
 
     def __call__(self, seq):
-        if self.alphabet == DNA and self.neutral_alphabet == ["N"] and self.neutral_value == 0.25:
+        if self.alphabet == DNA and self.neutral_alphabet == ("N",) and self.neutral_value == 0.25:
             return F.one_hot_dna(
                 seq,
                 alphabet=self.alphabet,
@@ -143,12 +144,13 @@ class ReorderedOneHot:
     It encodes the letters like :class:`OneHot`.
 
     :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-        Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
-    :param neutral_alphabet: (single string character) neutral element representing
+        A list or tuple of letters, e.g. ``list("ACGT")`` or ``["A", "C", "G", "T"]``
+    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column, as a list or tuple
     :param neutral_value: value of the neutral element
     :param dtype: defines the numpy dtype of the returned array.
     :param alphabet_axis: axis along which the alphabet runs (e.g. A,C,G,T for DNA)
     :param dummy_axis: defines in which dimension a dummy axis should be added. None if no dummy axis is required.
+    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
 
     Examples (``None`` = sequence axis):
 
@@ -158,7 +160,7 @@ class ReorderedOneHot:
     """
 
     def __init__(
-        self, alphabet=DNA, neutral_alphabet="N", neutral_value=0.25, dtype=None, alphabet_axis=1, dummy_axis=None
+        self, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtype=None, alphabet_axis=1, dummy_axis=None
     ):
         # make sure the alphabet axis and the dummy axis are valid:
         if dummy_axis is not None:
@@ -170,7 +172,7 @@ class ReorderedOneHot:
 
         self.alphabet_axis = alphabet_axis
         self.dummy_axis = dummy_axis
-        self.alphabet = parse_alphabet(alphabet)
+        self.alphabet = alphabet
         self.dtype = parse_dtype(dtype)
         self.neutral_alphabet = neutral_alphabet
         self.neutral_value = neutral_value

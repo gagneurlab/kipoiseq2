@@ -19,12 +19,12 @@ def test_ReorderedOneHot():
     seq = "A" * seqlen
 
     test_pairs = [
-        (("ACGT", 1, None), (10, 4)),
-        (("ACGT", 2, 1), (10, 1, 4)),
-        (("ACGTD", 2, 1), (10, 1, 5)),
-        (("ACGT", 0, None), (4, 10)),
-        (("ACGT", 0, 1), (4, 1, 10)),
-        (("ACGT", 0, 2), (4, 10, 1)),
+        ((list("ACGT"), 1, None), (10, 4)),
+        ((list("ACGT"), 2, 1), (10, 1, 4)),
+        ((list("ACGTD"), 2, 1), (10, 1, 5)),
+        ((list("ACGT"), 0, None), (4, 10)),
+        ((list("ACGT"), 0, 1), (4, 1, 10)),
+        ((list("ACGT"), 0, 2), (4, 10, 1)),
     ]
 
     for args, result in test_pairs:
@@ -40,11 +40,12 @@ def test_ReorderedOneHot():
         ReorderedOneHot(dummy_axis=1)
 
 
-# OneHot() encodes with one_hot_dna, and OneHot(alphabet="ACGT") with one_hot
+# OneHot() encodes with one_hot_dna. OneHot(alphabet=list("ACGT")) encodes with one_hot,
+# because a list never equals the tuple DNA.
 @pytest.mark.parametrize("seq", ["", "ACGTN", "acgtn", "AcGtN"])
 @pytest.mark.parametrize("dtype", [None, np.float32, np.int8])
 def test_OneHot_paths_agree(seq, dtype):
-    expected = OneHot(alphabet="ACGT", dtype=dtype)(seq)
+    expected = OneHot(alphabet=list("ACGT"), dtype=dtype)(seq)
     result = OneHot(dtype=dtype)(seq)
     assert result.dtype == expected.dtype
     assert np.array_equal(result, expected)
@@ -53,17 +54,47 @@ def test_OneHot_paths_agree(seq, dtype):
 @pytest.mark.parametrize("seq", ["ACGTX", "acgtx", "ACGT\xff", "ACGTé"])
 def test_OneHot_paths_agree_unknown_letters(seq):
     with pytest.raises(ValueError) as excinfo:
-        OneHot(alphabet="ACGT")(seq)
+        OneHot(alphabet=list("ACGT"))(seq)
     with pytest.raises(ValueError, match=re.escape(str(excinfo.value))):
         OneHot()(seq)
 
 
-@pytest.mark.parametrize("alphabet", ["ACGT", ("A", "C", "G", "T")])
+@pytest.mark.parametrize("alphabet", [list("ACGT"), ("A", "C", "G", "T")])
 def test_ReorderedOneHot_ignores_case(alphabet):
     tr = ReorderedOneHot(alphabet=alphabet, alphabet_axis=0)
     assert np.array_equal(tr("acgtn"), tr("ACGTN"))
     with pytest.raises(ValueError, match="X"):
         tr("ACGTX")
+
+
+@pytest.mark.parametrize("transform", [OneHot, ReorderedOneHot])
+@pytest.mark.parametrize("name, value", [("alphabet", "ACGT"), ("neutral_alphabet", "N"), ("neutral_alphabet", "NRY")])
+def test_OneHot_alphabet_str(transform, name, value):
+    expected = f"{name} must be a list or tuple of strings, not a str: "
+    expected += f"pass a list of letters, e.g. list({value!r}) or [{value!r}]"
+    with pytest.raises(TypeError, match=f"^{re.escape(expected)}$"):
+        transform(**{name: value})
+
+
+@pytest.mark.parametrize("transform", [OneHot, ReorderedOneHot])
+@pytest.mark.parametrize("name, value", [("alphabet", ["A", "C", "G", 1]), ("neutral_alphabet", [None])])
+def test_OneHot_alphabet_not_strings(transform, name, value):
+    with pytest.raises(TypeError, match=f"^{name} must be a list or tuple of strings"):
+        transform(**{name: value})
+
+
+def test_OneHot_letters_with_several_characters():
+    # each element of the list is one letter
+    tr = OneHot(alphabet=["ACG", "TGA"], neutral_alphabet=["NNN"])
+    assert np.array_equal(tr("ACGTGANNN"), [[1, 0], [0, 1], [0.25, 0.25]])
+
+
+def test_OneHot_defaults_encode_with_one_hot_dna(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("OneHot() encoded with one_hot")
+
+    monkeypatch.setattr(kipoiseq2.transforms.functional, "one_hot", fail)
+    assert OneHot()("ACGTN").shape == (5, 4)
 
 
 def test_SplitSplicingSeq():

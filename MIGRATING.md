@@ -47,7 +47,11 @@ The matchers use polars instead of pyranges:
 - `one_hot_dna`, `one_hot`, `tokenize`, `OneHot` and `ReorderedOneHot` ignore case: a lowercase letter, e.g. of a soft-masked repeat, encodes like its uppercase form.
 - They raise a ValueError that names the letters of the sequence that are in neither `alphabet` nor `neutral_alphabet`, e.g. IUPAC codes such as `R` or `Y`.
   To encode IUPAC codes like `N`, add them to `neutral_alphabet`, e.g. `one_hot_dna(seq, neutral_alphabet=list("NRYSWKMBDHV"))`.
-- They raise a ValueError if two letters of `alphabet` and `neutral_alphabet` differ only in case but encode differently, e.g. for `alphabet="ACGTacgt"`.
+- They raise a ValueError if two letters of `alphabet` and `neutral_alphabet` differ only in case but encode differently, e.g. for `alphabet=list("ACGTacgt")`.
 - In kipoiseq and kipoiseq2 0.1, `one_hot_dna` encoded lowercase and unknown letters as rows of zeros.
   `OneHot` and `ReorderedOneHot` did the same with the default `alphabet`, `neutral_alphabet` and `neutral_value`.
   Otherwise they raised a KeyError, as did `one_hot` and `tokenize`.
+- `one_hot_dna`, `one_hot`, `tokenize`, `one_hot2string`, `OneHot` and `ReorderedOneHot` take `alphabet` and `neutral_alphabet` only as a list or tuple of strings, and raise a TypeError for a str.
+  A str was ambiguous: `one_hot_dna` read `neutral_alphabet="NRY"` as three letters, but the others read it as one letter of three characters.
+  `alphabet="ACGT"` becomes `alphabet=list("ACGT")`, and `neutral_alphabet="N"` becomes `neutral_alphabet=["N"]`.
+  `one_hot_dna` no longer splits the elements of `neutral_alphabet` into characters, so `neutral_alphabet=["NRY"]` raises a ValueError: pass `list("NRY")` instead.

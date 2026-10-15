@@ -1,11 +1,32 @@
 import string
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 import numpy as np
 
 from kipoiseq2.utils import DNA
 
 # sequence -> array
+
+
+def _check_letters(letters, name):
+    """Check that ``letters`` is a list or tuple of strings.
+
+    A str is ambiguous: ``"NRY"`` can mean three letters or one letter of three characters.
+
+    :param letters: the value of the argument ``name``
+    :param name: the name of the argument in the error message, e.g. ``"alphabet"``
+    :raises TypeError: if ``letters`` is not a list or tuple, or if it contains an element that is not a str
+    """
+    if isinstance(letters, str):
+        raise TypeError(
+            f"{name} must be a list or tuple of strings, not a str: "
+            f"pass a list of letters, e.g. list({letters!r}) or [{letters!r}]"
+        )
+    if not isinstance(letters, (list, tuple)):
+        raise TypeError(f"{name} must be a list or tuple of strings, not {type(letters).__name__}")
+    for letter in letters:
+        if not isinstance(letter, str):
+            raise TypeError(f"{name} must be a list or tuple of strings, but contains {letter!r}")
 
 
 def _get_token_dict(alphabet, neutral_alphabet):
@@ -35,7 +56,14 @@ def one_hot2token(arr):
 
 
 def one_hot2string(arr, alphabet=DNA):
-    """Convert a one-hot encoded array back to string"""
+    """Convert a one-hot encoded array back to string
+
+    :param arr: array of shape ``(n_seqs, seq_len, len(alphabet))``
+    :param alphabet: letters of the columns, as a list or tuple of strings
+    :returns: list of ``n_seqs`` strings, with the letter of the largest column at each position
+    :raises TypeError: if ``alphabet`` is not a list or tuple of strings
+    """
+    _check_letters(alphabet, "alphabet")
     tokens = one_hot2token(arr)
     indexToLetter = _get_index_dict(alphabet)
 
@@ -81,22 +109,23 @@ def rc_rna(seq):
     return "".join([rc_hash[s] for s in reversed(seq)])
 
 
-def tokenize(seq, alphabet=DNA, neutral_alphabet=["N"]):
+def tokenize(seq, alphabet=DNA, neutral_alphabet=("N",)):
     """Convert sequence to integers
 
     Lowercase letters encode like their uppercase form.
 
     :param seq: Sequence to encode
-    :param alphabet: Alphabet to use
-    :param neutral_alphabet: Neutral alphabet -> assign those values to -1
+    :param alphabet: Alphabet to use, as a list or tuple of letters
+    :param neutral_alphabet: Neutral alphabet -> assign those values to -1. A list or tuple of letters.
     :returns: List of length ``len(seq)`` with integers from ``-1`` to ``len(alphabet) - 1``
+    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
     :raises ValueError: if ``seq`` contains a letter that is not in ``alphabet`` or ``neutral_alphabet``,
-        or if two letters differ only in case but encode differently, e.g. for ``alphabet="ACGTacgt"``
+        or if two letters differ only in case but encode differently, e.g. for ``alphabet=list("ACGTacgt")``
     """
-    # Req: all alphabets have the same length
-    if isinstance(neutral_alphabet, str):
-        neutral_alphabet = [neutral_alphabet]
+    _check_letters(alphabet, "alphabet")
+    _check_letters(neutral_alphabet, "neutral_alphabet")
 
+    # Req: all alphabets have the same length
     nchar = len(alphabet[0])
     for letter in (*alphabet, *neutral_alphabet):
         assert len(letter) == nchar
@@ -129,22 +158,23 @@ def token2one_hot(tokens, alphabet_size=4, neutral_value=0.25, dtype=None):
     return arr
 
 
-def one_hot(seq, alphabet=DNA, neutral_alphabet=["N"], neutral_value=0.25, dtype=None):
+def one_hot(seq, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
     """One-hot encode a sequence.
 
     Lowercase letters encode like their uppercase form.
     For letters that are single ASCII characters, :func:`one_hot_dna` gives the same values faster.
 
     :param seq: sequence to encode
-    :param alphabet: letters of the columns, all of the same length.
+    :param alphabet: letters of the columns as a list or tuple, all of the same length, e.g. ``list("ACGT")``.
         For letters with several characters, ``seq`` is split into letters of that length.
-    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column
+    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column, as a list or tuple
     :param neutral_value: value of the neutral letters
     :param dtype: numpy dtype of the returned array
     :returns: array of shape ``(len(seq) // len(alphabet[0]), len(alphabet))``
+    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
     :raises ValueError: if ``seq`` is not a string,
         if ``seq`` contains a letter that is not in ``alphabet`` or ``neutral_alphabet``,
-        or if two letters differ only in case but encode differently, e.g. for ``alphabet="ACGTacgt"``
+        or if two letters differ only in case but encode differently, e.g. for ``alphabet=list("ACGTacgt")``
     """
     if not isinstance(seq, str):
         raise ValueError("seq needs to be a string")
@@ -154,8 +184,8 @@ def one_hot(seq, alphabet=DNA, neutral_alphabet=["N"], neutral_value=0.25, dtype
 # Reference: https://github.com/deepmind/deepmind-research/blob/fa8c9be4bb0cfd0b8492203eb2a9f31ef995633c/enformer/enformer.py#L306-L318
 def one_hot_dna(
     seq: str,
-    alphabet: Sequence[str] = DNA,
-    neutral_alphabet: Sequence[str] = "N",
+    alphabet: list[str] | tuple[str, ...] = DNA,
+    neutral_alphabet: list[str] | tuple[str, ...] = ("N",),
     neutral_value: Any = 0.25,
     dtype=np.float32,
 ) -> np.ndarray:
@@ -165,23 +195,25 @@ def one_hot_dna(
     Lowercase letters encode like their uppercase form.
 
     :param seq: sequence to encode
-    :param alphabet: letters of the columns, each a single ASCII character
+    :param alphabet: letters of the columns, each a single ASCII character, e.g. ``list("ACGT")``
     :param neutral_alphabet: letters to encode as ``neutral_value`` in every column, each a single ASCII character
     :param neutral_value: value of the neutral letters
     :param dtype: numpy dtype of the returned array
     :returns: array of shape ``(len(seq), len(alphabet))``
+    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
     :raises ValueError: if ``seq`` is not a string,
         if a letter of ``alphabet`` or ``neutral_alphabet`` is not a single ASCII character,
         if ``seq`` contains a letter that is not in ``alphabet`` or ``neutral_alphabet``,
-        or if two letters differ only in case but encode differently, e.g. for ``alphabet="ACGTacgt"``
+        or if two letters differ only in case but encode differently, e.g. for ``alphabet=list("ACGTacgt")``
     """
     if not isinstance(seq, str):
         raise ValueError("sequence needs to be a string")
-    neutral_letters = list("".join(neutral_alphabet))
-    if not all(len(letter) == 1 and letter.isascii() for letter in (*alphabet, *neutral_letters)):
+    _check_letters(alphabet, "alphabet")
+    _check_letters(neutral_alphabet, "neutral_alphabet")
+    if not all(len(letter) == 1 and letter.isascii() for letter in (*alphabet, *neutral_alphabet)):
         raise ValueError("alphabet and neutral_alphabet need to consist of single ASCII characters")
 
-    token_dict = _get_token_dict(alphabet, neutral_letters)
+    token_dict = _get_token_dict(alphabet, neutral_alphabet)
     known_bytes = "".join(letter + letter.lower() for letter in token_dict).encode("ascii")
 
     # one row per byte value
@@ -198,7 +230,7 @@ def one_hot_dna(
             return table[np.frombuffer(seq_bytes, dtype=np.uint8)]
     # one_hot raises the ValueError that names the unknown letters.
     # It also encodes the non-ASCII "ı" and "ſ" like "I" and "S", because str.upper maps them to these.
-    return one_hot(seq, alphabet, neutral_letters, neutral_value, dtype)
+    return one_hot(seq, alphabet, neutral_alphabet, neutral_value, dtype)
 
 
 # sequence trimming

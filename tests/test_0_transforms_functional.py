@@ -7,6 +7,7 @@ from kipoiseq2.dataclasses import Interval
 from kipoiseq2.transforms.functional import (
     fixed_len,
     one_hot,
+    one_hot2string,
     one_hot_dna,
     pad,
     resize_interval,
@@ -20,11 +21,11 @@ from kipoiseq2.utils import DNA
 
 
 def test_tokenize():
-    assert np.all(tokenize("ACGTTA", DNA, neutral_alphabet="N") == [0, 1, 2, 3, 3, 0])
-    assert np.all(tokenize("ACGTGATGA", ["ACG", "TGA"], neutral_alphabet="NNN") == [0, 1, 1])
-    assert np.all(tokenize("ACGTGATGA", ["ACG"], neutral_alphabet="TGA") == [0, -1, -1])
+    assert np.all(tokenize("ACGTTA", DNA, neutral_alphabet=["N"]) == [0, 1, 2, 3, 3, 0])
+    assert np.all(tokenize("ACGTGATGA", ["ACG", "TGA"], neutral_alphabet=["NNN"]) == [0, 1, 1])
+    assert np.all(tokenize("ACGTGATGA", ["ACG"], neutral_alphabet=["TGA"]) == [0, -1, -1])
     with pytest.raises(ValueError, match="TGA"):
-        tokenize("ACGTGATGA", ["ACG"], neutral_alphabet="NNN")
+        tokenize("ACGTGATGA", ["ACG"], neutral_alphabet=["NNN"])
 
 
 def test_token2one_hot():
@@ -32,13 +33,13 @@ def test_token2one_hot():
 
 
 def test_tokenize_one_hot():
-    assert one_hot("ACG", DNA, "N").shape == (3, 4)
+    assert one_hot("ACG", DNA, ["N"]).shape == (3, 4)
 
-    et = tokenize("ACG", DNA, "N")
+    et = tokenize("ACG", DNA, ["N"])
     assert et.shape == (3,)
     assert np.array_equal(et, np.array([0, 1, 2]))
 
-    et = tokenize("TGTN", DNA, "N")
+    et = tokenize("TGTN", DNA, ["N"])
     assert np.array_equal(et, np.array([3, 2, 3, -1]))  # N mapped to -1
 
 
@@ -85,11 +86,11 @@ def test_one_hot_ignores_case(encode, seq):
 
 
 def test_tokenize_ignores_case():
-    assert np.array_equal(tokenize("acgtn", DNA, neutral_alphabet="N"), [0, 1, 2, 3, -1])
+    assert np.array_equal(tokenize("acgtn", DNA, neutral_alphabet=["N"]), [0, 1, 2, 3, -1])
     # the case can change inside a letter with several characters
-    assert np.array_equal(tokenize("ACgtgAnnN", ["ACG", "TGA"], neutral_alphabet="NNN"), [0, 1, -1])
+    assert np.array_equal(tokenize("ACgtgAnnN", ["ACG", "TGA"], neutral_alphabet=["NNN"]), [0, 1, -1])
     # an alphabet in lowercase encodes uppercase letters
-    assert np.array_equal(tokenize("ACgt", "acgt", neutral_alphabet="n"), [0, 1, 2, 3])
+    assert np.array_equal(tokenize("ACgt", list("acgt"), neutral_alphabet=["n"]), [0, 1, 2, 3])
 
 
 @pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
@@ -119,7 +120,7 @@ def test_one_hot_iupac_as_neutral(encode):
 
 
 @pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
-@pytest.mark.parametrize("alphabet, neutral_alphabet", [("ACGTacgt", ["N"]), ("ACGT", ["N", "a"])])
+@pytest.mark.parametrize("alphabet, neutral_alphabet", [(list("ACGTacgt"), ["N"]), (DNA, ["N", "a"])])
 def test_one_hot_letters_differ_only_in_case(encode, alphabet, neutral_alphabet):
     with pytest.raises(ValueError, match="differ only in case"):
         encode("ACGT", alphabet, neutral_alphabet)
@@ -130,7 +131,16 @@ def test_one_hot_letters_differ_only_in_case_same_encoding(encode):
     assert np.array_equal(encode("Nn", neutral_alphabet=["N", "n"]), [[0.25] * 4] * 2)
 
 
-@pytest.mark.parametrize("alphabet, neutral_alphabet", [(["AC", "GT"], ["N"]), ("ACG\xff", ["N"]), (DNA, ["Ñ"])])
+@pytest.mark.parametrize(
+    "alphabet, neutral_alphabet",
+    [
+        (["AC", "GT"], ["N"]),
+        (list("ACG\xff"), ["N"]),
+        (DNA, ["Ñ"]),
+        # one element is one letter, so "NRY" is not three letters
+        (DNA, ["NRY"]),
+    ],
+)
 def test_one_hot_dna_needs_single_ascii_letters(alphabet, neutral_alphabet):
     with pytest.raises(ValueError, match="single ASCII characters"):
         one_hot_dna("ACGT", alphabet, neutral_alphabet)
@@ -143,9 +153,9 @@ def test_one_hot_dna_needs_single_ascii_letters(alphabet, neutral_alphabet):
         (DNA, "ACGTN"),
         (DNA, "acgtn"),
         (DNA, "AcGtN"),
-        ("ACGTSI", "SIsiN"),
+        (list("ACGTSI"), "SIsiN"),
         # str.upper maps the non-ASCII "ſ" and "ı" to "S" and "I"
-        ("ACGTSI", "ſı"),
+        (list("ACGTSI"), "ſı"),
     ],
 )
 @pytest.mark.parametrize("dtype", [None, np.float32, np.int8])
@@ -162,6 +172,53 @@ def test_one_hot_dna_equals_one_hot_unknown_letters(seq):
         one_hot(seq)
     with pytest.raises(ValueError, match=re.escape(str(excinfo.value))):
         one_hot_dna(seq)
+
+
+@pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
+@pytest.mark.parametrize("name, value", [("alphabet", "ACGT"), ("neutral_alphabet", "N"), ("neutral_alphabet", "NRY")])
+def test_one_hot_alphabet_str(encode, name, value):
+    # a str is ambiguous: "NRY" can mean three letters or one letter of three characters
+    expected = f"{name} must be a list or tuple of strings, not a str: "
+    expected += f"pass a list of letters, e.g. list({value!r}) or [{value!r}]"
+    with pytest.raises(TypeError, match=f"^{re.escape(expected)}$"):
+        encode("ACGT", **{name: value})
+
+
+@pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
+@pytest.mark.parametrize(
+    "name, value",
+    [
+        ("alphabet", ["A", "C", "G", 1]),
+        ("alphabet", [b"A", b"C", b"G", b"T"]),
+        # a set has no order
+        ("alphabet", {"A", "C", "G", "T"}),
+        ("neutral_alphabet", [None]),
+    ],
+)
+def test_one_hot_alphabet_not_strings(encode, name, value):
+    with pytest.raises(TypeError, match=f"^{name} must be a list or tuple of strings"):
+        encode("ACGT", **{name: value})
+
+
+def test_one_hot_letters_with_several_characters():
+    # each element of the list is one letter
+    assert np.array_equal(one_hot("ACGTGANNN", ["ACG", "TGA"], ["NNN"]), [[1, 0], [0, 1], [0.25, 0.25]])
+
+
+@pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
+@pytest.mark.parametrize("neutral_alphabet", [[], ()])
+def test_one_hot_empty_neutral_alphabet(encode, neutral_alphabet):
+    assert np.array_equal(encode("ACGT", DNA, neutral_alphabet), encode("ACGT"))
+    with pytest.raises(ValueError, match=re.escape("['N']")):
+        encode("ACGTN", DNA, neutral_alphabet)
+
+
+def test_one_hot2string():
+    arr = np.stack([one_hot("ACGTA"), one_hot("TTGCA")])
+    assert one_hot2string(arr) == ["ACGTA", "TTGCA"]
+    assert one_hot2string(arr, ["W", "X", "Y", "Z"]) == ["WXYZW", "ZZYXW"]
+    with pytest.raises(TypeError, match=re.escape("list('ACGT')")):
+        one_hot2string(arr, "ACGT")
 
 
 def test_fixed_len():
