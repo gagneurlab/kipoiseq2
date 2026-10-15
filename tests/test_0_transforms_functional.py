@@ -175,3 +175,11 @@ def test_resize_interval_start_end_are_genomic(strand):
     assert resize_interval(interval, 4, "end") == Interval("chr1", 16, 20, strand=strand)
     assert resize_interval(interval, 13, "start") == Interval("chr1", 10, 23, strand=strand)
     assert resize_interval(interval, 13, "end") == Interval("chr1", 7, 20, strand=strand)
+
+
+def test_resize_interval_invalid_anchor():
+    interval = Interval("chr1", 10, 20)
+    with pytest.raises(ValueError, match="anchor point"):
+        resize_interval(interval, 4, "middle")
+    with pytest.raises(ValueError, match="anchor point"):
+        ResizeInterval(4, "middle")(interval)

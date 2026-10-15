@@ -152,7 +152,7 @@ def resize_interval(interval, width, anchor="center"):
         which rounds the center by the strand of the interval.
         'start' keeps the genomic ``start`` and 'end' keeps the genomic ``end``, on all strands.
     :returns: a new :class:`~kipoiseq2.dataclasses.Interval` of width ``width``
-    :raises Exception: if ``anchor`` is not 'start', 'center' or 'end'
+    :raises ValueError: if ``anchor`` is not 'start', 'center' or 'end'
     """
     if anchor == "start":
         return interval.slop(downstream=width - interval.width(), use_strand=False)
@@ -161,7 +161,7 @@ def resize_interval(interval, width, anchor="center"):
     elif anchor == "center":
         return interval.resize(width)
     else:
-        raise Exception("Interval resizing anchor point can only be 'start', 'end' or 'center'")
+        raise ValueError("Interval resizing anchor point can only be 'start', 'end' or 'center'")
 
 
 TRANSLATION_TABLE = {
