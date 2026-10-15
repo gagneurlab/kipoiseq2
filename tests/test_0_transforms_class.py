@@ -30,10 +30,10 @@ def test_ReorderedOneHot():
         assert out.shape == tr.get_output_shape(seqlen)
         assert out.shape == result
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
         ReorderedOneHot(alphabet_axis=1, dummy_axis=1)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
         ReorderedOneHot(dummy_axis=1)
 
 

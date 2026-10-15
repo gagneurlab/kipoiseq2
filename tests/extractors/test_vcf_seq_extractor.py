@@ -83,6 +83,13 @@ def variant_seq_extractor():
     return VariantSeqExtractor(fasta_file)
 
 
+def test_variant_seq_extractor_reference_arguments():
+    with pytest.raises(ValueError, match="exactly one of `fasta_file` and `reference_sequence`"):
+        VariantSeqExtractor()
+    with pytest.raises(ValueError, match="exactly one of `fasta_file` and `reference_sequence`"):
+        VariantSeqExtractor(fasta_file, reference_sequence=FastaStringExtractor(fasta_file))
+
+
 def test__split_overlapping(variant_seq_extractor):
     pair = (Subsequence(seq="AAA", start=3, end=6), Subsequence(seq="T", start=3, end=4))
     splited_pairs = list(variant_seq_extractor._split_overlapping([pair], 5))
@@ -203,7 +210,7 @@ def test_extract_interval_at_chromosome_end(variant_seq_extractor, is_padding):
         )
         assert seq == "ACGACGTANN"
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="is_padding"):
             variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10, chrom_len=CHROM_LEN)
 
 

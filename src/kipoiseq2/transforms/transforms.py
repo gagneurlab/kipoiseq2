@@ -160,7 +160,7 @@ class ReorderedOneHot:
         # make sure the alphabet axis and the dummy axis are valid:
         if dummy_axis is not None:
             if alphabet_axis == dummy_axis:
-                raise ValueError("dummy_axis can't be the same as dummy_axis")
+                raise ValueError("dummy_axis can't be the same as alphabet_axis")
             if not (dummy_axis >= 0 and dummy_axis <= 2):
                 raise ValueError("dummy_axis can be either 0,1 or 2")
         assert alphabet_axis >= 0 and (alphabet_axis < 2 or (alphabet_axis <= 2 and dummy_axis is not None))
@@ -205,7 +205,7 @@ class ReorderedOneHot:
     def get_output_shape(self, seqlen=None):
         """Compute the output shape"""
         if self.dummy_axis is not None and self.alphabet_axis == self.dummy_axis:
-            raise ValueError("dummy_axis can't be the same as dummy_axis")
+            raise ValueError("dummy_axis can't be the same as alphabet_axis")
 
         # default
         output_shape = (seqlen, len(self.alphabet))
