@@ -13,6 +13,8 @@ Tests to perform:
 - shift, swapt_strand, trim, etc
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from kipoiseq2.dataclasses import Interval, Variant
@@ -64,6 +66,20 @@ def test_variant():
     v.source = 2
 
     assert isinstance(Variant("chr1", "10", "C", "T").pos, int)
+
+
+@pytest.mark.parametrize("other", ["chr1:10:C>T", None, 1, Interval("chr1", 9, 10)])
+def test_variant_eq_other_types(other):
+    v = Variant("chr1", 10, "C", "T")
+    assert not v == other
+    assert v != other
+
+
+def test_variant_eq_same_attributes():
+    # objects with the same attributes, e.g. a kipoiseq Variant, compare by attributes
+    v = Variant("chr1", 10, "C", "T")
+    assert v == SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="T")
+    assert v != SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="G")
 
 
 def test_interval():
@@ -180,3 +196,35 @@ def test_interval():
 
     i2 = interval.trim(1, 10, use_strand=False)
     assert i2.start == 11 and i2.end == 20
+
+
+@pytest.mark.parametrize("other", ["chr1:10-20:-", None, 1, Variant("chr1", 11, "C", "T")])
+def test_interval_eq_other_types(other):
+    interval = Interval("chr1", 10, 20, strand="-")
+    assert not interval == other
+    assert interval != other
+
+
+def test_interval_eq_same_attributes():
+    interval = Interval("chr1", 10, 20, strand="-")
+    assert interval == SimpleNamespace(chrom="chr1", start=10, end=20, strand="-")
+    assert interval != SimpleNamespace(chrom="chr1", start=10, end=20, strand="+")
+
+
+def test_interval_resize_use_strand():
+    assert Interval("chr1", 0, 11, strand="+").resize(4) == Interval("chr1", 4, 8, strand="+")
+    assert Interval("chr1", 0, 11, strand="-").resize(4) == Interval("chr1", 3, 7, strand="-")
+    assert Interval("chr1", 0, 11, strand=".").resize(4) == Interval("chr1", 4, 8, strand=".")
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_interval_resize_without_use_strand(strand):
+    i2 = Interval("chr1", 0, 11, strand=strand).resize(4, use_strand=False)
+    assert i2 == Interval("chr1", 4, 8, strand=strand)
+
+    # all strands give the result of an unstranded interval
+    for start, end in [(0, 11), (0, 10), (3, 8)]:
+        for width in [1, 4, 5, 12, 13]:
+            expected = Interval("chr1", start, end).resize(width)
+            i2 = Interval("chr1", start, end, strand=strand).resize(width, use_strand=False)
+            assert (i2.start, i2.end, i2.strand) == (expected.start, expected.end, strand)

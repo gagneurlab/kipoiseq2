@@ -86,7 +86,10 @@ class Variant:
         return self.start + len(self.ref)
 
     def __eq__(self, obj):
-        return self.chrom == obj.chrom and self.pos == obj.pos and self.ref == obj.ref and self.alt == obj.alt
+        try:
+            return self.chrom == obj.chrom and self.pos == obj.pos and self.ref == obj.ref and self.alt == obj.alt
+        except AttributeError:
+            return NotImplemented
 
     def __hash__(self):
         return hash((self.chrom, self.pos, self.ref, self.alt))
@@ -113,9 +116,6 @@ class Interval:
     `start` to `end - 1`, and its width is `end - start`. This is the
     BED convention. In 1-based VCF or GTF positions, the interval covers
     `start + 1` to `end`.
-
-    All fields can be either a single values (str or int) or a
-    numpy array of values.
 
     # Arguments
         chrom: Chromosome
@@ -220,7 +220,15 @@ class Interval:
         return obj
 
     def __eq__(self, obj):
-        return self.chrom == obj.chrom and self.start == obj.start and self.end == obj.end and self.strand == obj.strand
+        try:
+            return (
+                self.chrom == obj.chrom
+                and self.start == obj.start
+                and self.end == obj.end
+                and self.strand == obj.strand
+            )
+        except AttributeError:
+            return NotImplemented
 
     def __hash__(self):
         return hash((self.chrom, self.start, self.end, self.strand))
@@ -275,14 +283,16 @@ class Interval:
             # no need to resize
             return obj
 
+        # without use_strand, resize as an unstranded interval
+        center = self.center() if use_strand else self.unstrand().center()
         if self.neg_strand and use_strand:
             # negative strand
-            obj._start = self.center() - width // 2
-            obj._end = self.center() + width // 2 + width % 2
+            obj._start = center - width // 2
+            obj._end = center + width // 2 + width % 2
         else:
             # positive strand
-            obj._start = self.center() - width // 2 - width % 2
-            obj._end = self.center() + width // 2
+            obj._start = center - width // 2 - width % 2
+            obj._end = center + width // 2
         return obj
 
     def width(self):

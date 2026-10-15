@@ -31,8 +31,8 @@ def one_hot2string(arr, alphabet=DNA):
 def rc_dna(seq):
     """
     Reverse complement the DNA sequence
-    >>> assert rc_seq("TATCG") == "CGATA"
-    >>> assert rc_seq("tatcg") == "cgata"
+    >>> assert rc_dna("TATCG") == "CGATA"
+    >>> assert rc_dna("tatcg") == "cgata"
     """
     rc_hash = {
         "A": "T",
@@ -50,7 +50,7 @@ def rc_dna(seq):
 def rc_rna(seq):
     """
     Reverse complement the RNA sequence
-    >>> assert rc_seq("TATCG") == "CGATA"
+    >>> assert rc_rna("UAUCG") == "CGAUA"
     """
     rc_hash = {
         "A": "U",
@@ -133,6 +133,21 @@ def one_hot_dna(
 
 
 def pad(seq, length, value="N", anchor="center"):
+    """Pad a sequence to a fixed length
+
+    # Arguments
+        seq: str or list of chars
+            Sequence to pad
+        length: int; Final length of the sequence. Must be at least `len(seq)`.
+        value: Neutral element to pad the sequence with. Can be `str` or `list`, of the same type as `seq`.
+            If `value` has several elements, it is repeated and cut to the pad length on each side,
+            e.g. `pad("A", 4, value="NM", anchor="end")` returns `"NMNA"`.
+        anchor: character; 'start', 'end' or 'center'
+            To which end to anchor the sequence when padding.
+
+    # Returns
+        Sequence of length `length`, of the same type as `seq`
+    """
     seq_len = len(seq)
     assert length >= seq_len
     if anchor == "end":
@@ -147,11 +162,10 @@ def pad(seq, length, value="N", anchor="center"):
     else:
         raise ValueError("anchor can be of: end, start or center")
 
-    # normalize for the length
-    n_left = n_left // len(value)
-    n_right = n_right // len(value)
+    # repeat value often enough and cut it to the pad length on each side
+    padding = value * (max(n_left, n_right) // len(value) + 1)
 
-    return value * n_left + seq + value * n_right
+    return padding[:n_left] + seq + padding[:n_right]
 
 
 def trim(seq, length, anchor="center"):
@@ -172,44 +186,44 @@ def trim(seq, length, anchor="center"):
 
 
 def fixed_len(seq, length, anchor="center", value="N"):
-    """Pad and/or trim a list of sequences to have common length. Procedure:
+    """Pad or trim a sequence to a fixed length. Procedure:
 
-        1. Pad the sequence with N's or any other string or list element (`value`)
-        2. Subset the sequence
+        1. Pad the sequence with N's or any other string or list element (`value`) if it is shorter than `length`
+        2. Trim the sequence if it is longer than `length`
 
     # Note
         See also: https://keras.io/preprocessing/sequence/
-        Aplicable also for lists of characters
+        Applicable also for lists of characters
 
     # Arguments
-        sequence_vec: list of chars or lists
-            List of sequences that can have various lengths
-        value: Neutral element to pad the sequence with. Can be `str` or `list`.
-        length: int or None; Final lenght of sequences.
-             If None, length is set to the longest sequence length.
+        seq: str or list of chars
+            Sequence to pad or trim
+        length: int; Final length of the sequence.
         anchor: character; 'start', 'end' or 'center'
-            To which end to anchor the sequences when triming/padding. See examples bellow.
+            To which end to anchor the sequence when trimming/padding. See examples below.
+        value: Neutral element to pad the sequence with. Can be `str` or `list`, of the same type as `seq`.
+            If `value` has several elements, it is repeated and cut to the pad length on each side (see `pad`).
 
     # Returns
-        List of sequences of the same class as sequence_vec
+        Sequence of length `length`, of the same type as `seq`
 
     # Example
 
         ```python
             >>> sequence = 'CTTACTCAGA'
-            >>> pad_sequence(sequence, 10, anchor="start", value="N")
+            >>> fixed_len(sequence, 10, anchor="start", value="N")
             'CTTACTCAGA'
-            >>> pad_sequence(sequence, 10, anchor="end", value="N")
+            >>> fixed_len(sequence, 10, anchor="end", value="N")
             'CTTACTCAGA'
-            >>> pad_sequences(sequence, 4, anchor="center", value="N")
+            >>> fixed_len(sequence, 4, anchor="center", value="N")
             'ACTC'
 
             >>> sequence = 'TCTTTA'
-            >>> pad_sequence(sequence, 10, anchor="start", value="N")
+            >>> fixed_len(sequence, 10, anchor="start", value="N")
             'TCTTTANNNN'
-            >>> pad_sequence(sequence, 10, anchor="end", value="N")
+            >>> fixed_len(sequence, 10, anchor="end", value="N")
             'NNNNTCTTTA'
-            >>> pad_sequences(sequence, 4, anchor="center", value="N")
+            >>> fixed_len(sequence, 4, anchor="center", value="N")
             'CTTT'
         ```
     """

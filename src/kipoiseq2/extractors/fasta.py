@@ -7,8 +7,8 @@ __all__ = ["FastaStringExtractor"]
 class FastaStringExtractor(BaseExtractor):
     """Fasta file extractor
 
-    NOTE: The extractor is not thread-save.
-    If you with to use it with multiprocessing,
+    NOTE: The extractor is not thread-safe.
+    If you wish to use it with multiprocessing,
     create a new extractor object in each process.
 
     # Arguments
@@ -55,7 +55,9 @@ class FastaStringExtractor(BaseExtractor):
         return seq
 
     def close(self):
-        return self.fasta.close()
+        # self.fasta is missing if __init__ failed, e.g. for a missing file
+        if hasattr(self, "fasta"):
+            return self.fasta.close()
 
 
 # class BigWigExtractor(BaseExtractor):

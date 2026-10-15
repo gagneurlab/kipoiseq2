@@ -1,5 +1,6 @@
 import pytest
 
+import kipoiseq2.transforms
 from kipoiseq2.transforms.transforms import Compose, OneHot, ReorderedOneHot, SplitSplicingSeq
 
 
@@ -29,10 +30,10 @@ def test_ReorderedOneHot():
         assert out.shape == tr.get_output_shape(seqlen)
         assert out.shape == result
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
         ReorderedOneHot(alphabet_axis=1, dummy_axis=1)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
         ReorderedOneHot(dummy_axis=1)
 
 
@@ -57,6 +58,27 @@ def test_SplitSplicingSeq():
     assert splited["donor"] == "AGAGT"
     assert splited["intron3prime"] == "CC"
 
+    # no AG before the exon and no GT after it
+    with pytest.warns(UserWarning) as record:
+        split("TAACCGTAGTAGACCCCC", 5, 5)
+    assert [str(w.message) for w in record] == ["Non-GT donor", "Non-AG acceptor"]
+
 
 def test_ResizeInterval():
     pass
+
+
+def test_transforms_namespace():
+    public = {name for name in vars(kipoiseq2.transforms) if not name.startswith("_")}
+    # functional and transforms are the submodules
+    assert public == {
+        "functional",
+        "transforms",
+        "Compose",
+        "DummyAxis",
+        "SwapAxes",
+        "ResizeInterval",
+        "OneHot",
+        "ReorderedOneHot",
+        "SplitSplicingSeq",
+    }

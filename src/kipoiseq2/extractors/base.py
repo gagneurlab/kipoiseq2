@@ -8,9 +8,7 @@ log = logging.getLogger(__name__)
 __all__ = ["BaseExtractor"]
 
 
-class BaseExtractor:
-    __metaclass__ = abc.ABCMeta
-
+class BaseExtractor(abc.ABC):
     _use_strand: bool
 
     # main method

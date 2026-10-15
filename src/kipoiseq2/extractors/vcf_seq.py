@@ -116,11 +116,11 @@ class VariantSeqExtractor(BaseExtractor):
 
         if fasta_file is not None:
             if reference_sequence is not None:
-                raise ValueError("either fasta_file or ref_seq_extractor have to be specified")
+                raise ValueError("Give exactly one of `fasta_file` and `reference_sequence`")
             self._ref_seq_extractor = FastaStringExtractor(fasta_file, use_strand=False)
         else:
             if reference_sequence is None:
-                raise ValueError("either fasta_file or ref_seq_extractor have to be specified")
+                raise ValueError("Give exactly one of `fasta_file` and `reference_sequence`")
             self._ref_seq_extractor = reference_sequence
 
     @property
@@ -320,7 +320,7 @@ class VariantSeqExtractor(BaseExtractor):
             if is_padding:
                 down_str = "N" * abs(down_diff) + down_str
             else:
-                raise ValueError("padding should be set to True, if the sequence can't extend to the fixed length")
+                raise ValueError("is_padding should be set to True, if the sequence can't extend to the fixed length")
 
         up_len = interval.end - anchor
         up_diff = len(up_str) - up_len
@@ -330,6 +330,6 @@ class VariantSeqExtractor(BaseExtractor):
             if is_padding:
                 up_str = up_str + "N" * abs(up_diff)
             else:
-                raise ValueError("padding should be set to True, if the sequence can't extend to the fixed length")
+                raise ValueError("is_padding should be set to True, if the sequence can't extend to the fixed length")
 
         return down_str, up_str

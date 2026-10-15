@@ -94,6 +94,24 @@ def test_pad_sequences():
     assert fixed_len(seq, 10, anchor="end", value="N") == "CTTACTCAGA"
 
 
+def test_pad_value_with_several_elements():
+    assert pad("A", 4, value="NM", anchor="start") == "ANMN"
+    assert pad("A", 4, value="NM", anchor="end") == "NMNA"
+    assert pad("A", 4, value="NM", anchor="center") == "NMAN"
+    assert pad([1], 4, value=[0, 9], anchor="end") == [0, 9, 0, 1]
+    assert pad([[1, 0]], 4, value=[[0, 0], [9, 9]], anchor="start") == [[1, 0], [0, 0], [9, 9], [0, 0]]
+    assert fixed_len("A", 4, value="NN") == "NNAN"
+
+
+@pytest.mark.parametrize("anchor", ["start", "end", "center"])
+def test_pad_value_with_several_elements_length(anchor):
+    for length in range(1, 12):
+        for value in ["NM", "NMK"]:
+            assert len(pad("A", length, value=value, anchor=anchor)) == length
+            assert len(pad(["A"], length, value=list(value), anchor=anchor)) == length
+            assert len(fixed_len("A", length, value=value, anchor=anchor)) == length
+
+
 def test_translate():
     assert translate("ATGTGGTAA") == "MW_"
     # TGA is a stop codon, and translation continues after it
