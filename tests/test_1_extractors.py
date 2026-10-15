@@ -1,7 +1,7 @@
 import pytest
 
 from kipoiseq2.dataclasses import Interval
-from kipoiseq2.extractors import FastaStringExtractor
+from kipoiseq2.extractors import BaseExtractor, FastaStringExtractor
 
 comp = {"A": "T", "C": "G", "G": "C", "T": "A"}
 comp.update({k.lower(): v.lower() for k, v in comp.items()})
@@ -28,3 +28,13 @@ def test_fastareader(use_strand, force_upper):
             assert seq == ref_seq.upper()
         else:
             assert seq == ref_seq
+
+
+def test_base_extractor_extract_is_abstract():
+    class NoExtract(BaseExtractor):
+        pass
+
+    with pytest.raises(TypeError, match="extract"):
+        BaseExtractor()
+    with pytest.raises(TypeError, match="extract"):
+        NoExtract()
