@@ -151,6 +151,8 @@ class ReorderedOneHot:
     :param alphabet_axis: axis along which the alphabet runs (e.g. A,C,G,T for DNA)
     :param dummy_axis: defines in which dimension a dummy axis should be added. None if no dummy axis is required.
     :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
+    :raises ValueError: if ``dummy_axis`` equals ``alphabet_axis`` or is not 0, 1 or 2,
+        or if ``alphabet_axis`` is not 0 or 1, or 2 with a ``dummy_axis``
 
     Examples (``None`` = sequence axis):
 
@@ -168,7 +170,8 @@ class ReorderedOneHot:
                 raise ValueError("dummy_axis can't be the same as alphabet_axis")
             if not (dummy_axis >= 0 and dummy_axis <= 2):
                 raise ValueError("dummy_axis can be either 0,1 or 2")
-        assert alphabet_axis >= 0 and (alphabet_axis < 2 or (alphabet_axis <= 2 and dummy_axis is not None))
+        if not (0 <= alphabet_axis < 2 or (alphabet_axis == 2 and dummy_axis is not None)):
+            raise ValueError(f"alphabet_axis can be 0 or 1, or 2 if dummy_axis is given, got {alphabet_axis!r}")
 
         self.alphabet_axis = alphabet_axis
         self.dummy_axis = dummy_axis

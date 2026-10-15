@@ -119,17 +119,23 @@ def tokenize(seq, alphabet=DNA, neutral_alphabet=("N",)):
     :param neutral_alphabet: Neutral alphabet -> assign those values to -1. A list or tuple of letters.
     :returns: List of length ``len(seq)`` with integers from ``-1`` to ``len(alphabet) - 1``
     :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
-    :raises ValueError: if ``seq`` contains a letter that is not in ``alphabet`` or ``neutral_alphabet``,
+    :raises ValueError: if the letters of ``alphabet`` and ``neutral_alphabet`` differ in length,
+        if ``len(seq)`` is not a multiple of the letter length,
+        if ``seq`` contains a letter that is not in ``alphabet`` or ``neutral_alphabet``,
         or if two letters differ only in case but encode differently, e.g. for ``alphabet=list("ACGTacgt")``
     """
     _check_letters(alphabet, "alphabet")
     _check_letters(neutral_alphabet, "neutral_alphabet")
 
-    # Req: all alphabets have the same length
+    # seq is split into letters of the same length
     nchar = len(alphabet[0])
-    for letter in (*alphabet, *neutral_alphabet):
-        assert len(letter) == nchar
-    assert len(seq) % nchar == 0  # since we are using striding
+    if any(len(letter) != nchar for letter in (*alphabet, *neutral_alphabet)):
+        raise ValueError(
+            "all letters of alphabet and neutral_alphabet must have the same length, "
+            f"got alphabet={alphabet!r} and neutral_alphabet={neutral_alphabet!r}"
+        )
+    if len(seq) % nchar != 0:
+        raise ValueError(f"len(seq) must be a multiple of the letter length {nchar}, got len(seq)={len(seq)}")
 
     token_dict = _get_token_dict(alphabet, neutral_alphabet)
     # current performance bottleneck
@@ -173,6 +179,8 @@ def one_hot(seq, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtyp
     :returns: array of shape ``(len(seq) // len(alphabet[0]), len(alphabet))``
     :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
     :raises ValueError: if ``seq`` is not a string,
+        if the letters of ``alphabet`` and ``neutral_alphabet`` differ in length,
+        if ``len(seq)`` is not a multiple of the letter length,
         if ``seq`` contains a letter that is not in ``alphabet`` or ``neutral_alphabet``,
         or if two letters differ only in case but encode differently, e.g. for ``alphabet=list("ACGTacgt")``
     """

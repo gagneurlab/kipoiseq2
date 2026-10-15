@@ -55,3 +55,5 @@ The matchers use polars instead of pyranges:
   A str was ambiguous: `one_hot_dna` read `neutral_alphabet="NRY"` as three letters, but the others read it as one letter of three characters.
   `alphabet="ACGT"` becomes `alphabet=list("ACGT")`, and `neutral_alphabet="N"` becomes `neutral_alphabet=["N"]`.
   `one_hot_dna` no longer splits the elements of `neutral_alphabet` into characters, so `neutral_alphabet=["NRY"]` raises a ValueError: pass `list("NRY")` instead.
+- `one_hot`, `tokenize`, `OneHot` and `ReorderedOneHot` raise a ValueError instead of an AssertionError if the letters of `alphabet` and `neutral_alphabet` differ in length, or if the length of `seq` is not a multiple of the letter length.
+  `ReorderedOneHot` also raises a ValueError instead of an AssertionError for an invalid `alphabet_axis`.

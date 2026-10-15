@@ -40,6 +40,13 @@ def test_ReorderedOneHot():
         ReorderedOneHot(dummy_axis=1)
 
 
+@pytest.mark.parametrize("alphabet_axis, dummy_axis", [(-1, None), (2, None), (3, 1), (-1, 2)])
+def test_ReorderedOneHot_invalid_alphabet_axis(alphabet_axis, dummy_axis):
+    expected = f"alphabet_axis can be 0 or 1, or 2 if dummy_axis is given, got {alphabet_axis}"
+    with pytest.raises(ValueError, match=f"^{re.escape(expected)}$"):
+        ReorderedOneHot(alphabet_axis=alphabet_axis, dummy_axis=dummy_axis)
+
+
 # OneHot() encodes with one_hot_dna. OneHot(alphabet=list("ACGT")) encodes with one_hot,
 # because a list never equals the tuple DNA.
 @pytest.mark.parametrize("seq", ["", "ACGTN", "acgtn", "AcGtN"])
@@ -81,6 +88,12 @@ def test_OneHot_alphabet_str(transform, name, value):
 def test_OneHot_alphabet_not_strings(transform, name, value):
     with pytest.raises(TypeError, match=f"^{name} must be a list or tuple of strings"):
         transform(**{name: value})
+
+
+@pytest.mark.parametrize("transform", [OneHot, ReorderedOneHot])
+def test_OneHot_letters_of_different_lengths(transform):
+    with pytest.raises(ValueError, match="^all letters of alphabet and neutral_alphabet must have the same length"):
+        transform(neutral_alphabet=["NRY"])("ACGT")
 
 
 def test_OneHot_letters_with_several_characters():

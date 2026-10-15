@@ -205,6 +205,25 @@ def test_one_hot_letters_with_several_characters():
     assert np.array_equal(one_hot("ACGTGANNN", ["ACG", "TGA"], ["NNN"]), [[1, 0], [0, 1], [0.25, 0.25]])
 
 
+@pytest.mark.parametrize("encode", [tokenize, one_hot])
+@pytest.mark.parametrize(
+    "alphabet, neutral_alphabet",
+    [(DNA, ["NRY"]), (["ACG", "TG"], ["NNN"]), (["ACG", "TGA"], ["N"])],
+)
+def test_one_hot_letters_of_different_lengths(encode, alphabet, neutral_alphabet):
+    expected = "all letters of alphabet and neutral_alphabet must have the same length, "
+    expected += f"got alphabet={alphabet!r} and neutral_alphabet={neutral_alphabet!r}"
+    with pytest.raises(ValueError, match=f"^{re.escape(expected)}$"):
+        encode("ACGT", alphabet, neutral_alphabet)
+
+
+@pytest.mark.parametrize("encode", [tokenize, one_hot])
+def test_one_hot_seq_length_not_a_multiple_of_letter_length(encode):
+    expected = "len(seq) must be a multiple of the letter length 3, got len(seq)=8"
+    with pytest.raises(ValueError, match=f"^{re.escape(expected)}$"):
+        encode("ACGTGANN", ["ACG", "TGA"], ["NNN"])
+
+
 @pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
 @pytest.mark.parametrize("neutral_alphabet", [[], ()])
 def test_one_hot_empty_neutral_alphabet(encode, neutral_alphabet):
