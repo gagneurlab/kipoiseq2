@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.1](https://github.com/gagneurlab/kipoiseq2/compare/v0.1.0...v0.1.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **dataclasses:** ignore the strand in Interval.resize(use_strand=False) ([#6](https://github.com/gagneurlab/kipoiseq2/issues/6)) ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* **dataclasses:** return NotImplemented when comparing with other types ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* **extractors:** do not raise in FastaStringExtractor.close after a ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* **extractors:** enforce BaseExtractor.extract as an abstract method ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* name the right arguments in error messages ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* **transforms:** correct the splice site warnings of SplitSplicingSeq ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* **transforms:** export only the transform classes from ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+* **transforms:** pad to the requested length when value has several ([3ec2672](https://github.com/gagneurlab/kipoiseq2/commit/3ec26728f32314c740248f9ac88d8c4a2da70161))
+
+
+### Documentation
+
+* build and publish API docs with Sphinx ([#7](https://github.com/gagneurlab/kipoiseq2/issues/7)) ([c24903f](https://github.com/gagneurlab/kipoiseq2/commit/c24903fd121f2e4b00241c1624578ed728d66678))
+
 ## 0.1.0 (2026-10-04)
 
 
