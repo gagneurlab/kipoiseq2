@@ -16,6 +16,8 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, cast
 
 from kipoiseq2.dataclasses import Interval, Variant
+from kipoiseq2.extractors._polars import _import_polars
+from kipoiseq2.extractors.vcf import scan_vcf_variants
 
 if TYPE_CHECKING:
     import polars as pl
@@ -28,17 +30,6 @@ __all__ = [
     "SingleVariantMatcher",
     "MultiVariantsMatcher",
 ]
-
-
-def _import_polars():
-    try:
-        import polars as pl
-        import polars_bio as pb
-    except ImportError as e:
-        raise ImportError(
-            "VCF reading and variant matching need the `ranges` extra: pip install 'kipoiseq2[ranges]'"
-        ) from e
-    return pl, pb
 
 
 def intervals_to_polars(intervals: Iterable[Interval]) -> pl.DataFrame:
@@ -209,8 +200,6 @@ class BaseVariantMatcher:
         if (vcf_file is None) == (variants is None):
             raise ValueError("Give exactly one of `vcf_file` and `variants`")
         if vcf_file is not None:
-            from kipoiseq2.extractors.vcf import scan_vcf_variants
-
             return scan_vcf_variants(vcf_file).select("chrom", "start", "end", "pos", "ref", "alt", "allele_idx")
         if not isinstance(variants, (pl.DataFrame, pl.LazyFrame)):
             # __iter__ yields these objects

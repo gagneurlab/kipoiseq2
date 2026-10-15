@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Optional, Sequence
 
-from kipoiseq2.extractors.vcf_matching import _import_polars
+from kipoiseq2.extractors._polars import _import_polars
 
 if TYPE_CHECKING:
     import polars as pl
