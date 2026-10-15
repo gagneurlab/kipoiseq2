@@ -41,3 +41,13 @@ The matchers use polars instead of pyranges:
 - `MultiVariantsMatcher` finds the variants of all intervals with one overlap join instead of one VCF query per interval.
 - `variants_to_pyranges`, `intervals_to_pyranges` and `pyranges_to_intervals` are replaced by `variants_to_polars` and `intervals_to_polars`.
   `PyrangesVariantFetcher` is gone: pass the variants as `variants`.
+
+## Breaking changes in 0.2
+
+- `one_hot_dna`, `one_hot`, `tokenize`, `OneHot` and `ReorderedOneHot` ignore case: a lowercase letter, e.g. of a soft-masked repeat, encodes like its uppercase form.
+- They raise a ValueError that names the letters of the sequence that are in neither `alphabet` nor `neutral_alphabet`, e.g. IUPAC codes such as `R` or `Y`.
+  To encode IUPAC codes like `N`, add them to `neutral_alphabet`, e.g. `one_hot_dna(seq, neutral_alphabet=list("NRYSWKMBDHV"))`.
+- They raise a ValueError if two letters of `alphabet` and `neutral_alphabet` differ only in case but encode differently, e.g. for `alphabet="ACGTacgt"`.
+- In kipoiseq and kipoiseq2 0.1, `one_hot_dna` encoded lowercase and unknown letters as rows of zeros.
+  `OneHot` and `ReorderedOneHot` did the same with the default `alphabet`, `neutral_alphabet` and `neutral_value`.
+  Otherwise they raised a KeyError, as did `one_hot` and `tokenize`.

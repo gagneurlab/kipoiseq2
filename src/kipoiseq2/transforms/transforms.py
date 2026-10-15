@@ -98,9 +98,13 @@ class ResizeInterval:
 class OneHot:
     """One-hot encode the sequence
 
+    Lowercase letters encode like their uppercase form.
+    Letters that are not in ``alphabet`` or ``neutral_alphabet`` raise a ValueError.
+    To encode IUPAC codes such as ``R`` like ``N``, add them to ``neutral_alphabet``.
+
     :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
         Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']
-    :param neutral_alphabet: which element to use
+    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column
     :param neutral_value: value of the neutral element
     :param dtype: defines the numpy dtype of the returned array.
     """
@@ -135,6 +139,8 @@ class OneHot:
 class ReorderedOneHot:
     """Flexible one-hot encoding class that can account for
     many different one-hot encoding formats.
+
+    It encodes the letters like :class:`OneHot`.
 
     :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
         Can either be a list or a string: 'ACGT' or ['A', 'C', 'G', 'T']

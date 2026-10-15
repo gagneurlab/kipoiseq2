@@ -1,3 +1,6 @@
+import re
+
+import numpy as np
 import pytest
 
 import kipoiseq2.transforms
@@ -35,6 +38,32 @@ def test_ReorderedOneHot():
 
     with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
         ReorderedOneHot(dummy_axis=1)
+
+
+# OneHot() encodes with one_hot_dna, and OneHot(alphabet="ACGT") with one_hot
+@pytest.mark.parametrize("seq", ["", "ACGTN", "acgtn", "AcGtN"])
+@pytest.mark.parametrize("dtype", [None, np.float32, np.int8])
+def test_OneHot_paths_agree(seq, dtype):
+    expected = OneHot(alphabet="ACGT", dtype=dtype)(seq)
+    result = OneHot(dtype=dtype)(seq)
+    assert result.dtype == expected.dtype
+    assert np.array_equal(result, expected)
+
+
+@pytest.mark.parametrize("seq", ["ACGTX", "acgtx", "ACGT\xff", "ACGTé"])
+def test_OneHot_paths_agree_unknown_letters(seq):
+    with pytest.raises(ValueError) as excinfo:
+        OneHot(alphabet="ACGT")(seq)
+    with pytest.raises(ValueError, match=re.escape(str(excinfo.value))):
+        OneHot()(seq)
+
+
+@pytest.mark.parametrize("alphabet", ["ACGT", ("A", "C", "G", "T")])
+def test_ReorderedOneHot_ignores_case(alphabet):
+    tr = ReorderedOneHot(alphabet=alphabet, alphabet_axis=0)
+    assert np.array_equal(tr("acgtn"), tr("ACGTN"))
+    with pytest.raises(ValueError, match="X"):
+        tr("ACGTX")
 
 
 def test_SplitSplicingSeq():

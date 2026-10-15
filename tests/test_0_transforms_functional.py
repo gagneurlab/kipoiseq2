@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pytest
 
@@ -21,7 +23,7 @@ def test_tokenize():
     assert np.all(tokenize("ACGTTA", DNA, neutral_alphabet="N") == [0, 1, 2, 3, 3, 0])
     assert np.all(tokenize("ACGTGATGA", ["ACG", "TGA"], neutral_alphabet="NNN") == [0, 1, 1])
     assert np.all(tokenize("ACGTGATGA", ["ACG"], neutral_alphabet="TGA") == [0, -1, -1])
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="TGA"):
         tokenize("ACGTGATGA", ["ACG"], neutral_alphabet="NNN")
 
 
@@ -73,6 +75,93 @@ def test_one_hot():
 
     with pytest.raises(ValueError):
         one_hot_dna(["A", "C"])
+
+
+@pytest.mark.parametrize("encode", [one_hot, one_hot_dna])
+@pytest.mark.parametrize("seq", ["acgtn", "AcGtN", "acGTn"])
+def test_one_hot_ignores_case(encode, seq):
+    # soft-masked repeats are lowercase
+    assert np.array_equal(encode(seq), encode("ACGTN"))
+
+
+def test_tokenize_ignores_case():
+    assert np.array_equal(tokenize("acgtn", DNA, neutral_alphabet="N"), [0, 1, 2, 3, -1])
+    # the case can change inside a letter with several characters
+    assert np.array_equal(tokenize("ACgtgAnnN", ["ACG", "TGA"], neutral_alphabet="NNN"), [0, 1, -1])
+    # an alphabet in lowercase encodes uppercase letters
+    assert np.array_equal(tokenize("ACgt", "acgt", neutral_alphabet="n"), [0, 1, 2, 3])
+
+
+@pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
+@pytest.mark.parametrize(
+    "seq, unknown",
+    [
+        ("ACGTX", ["X"]),
+        # IUPAC codes
+        ("ACGTRyR", ["R", "y"]),
+        ("AC GT-", [" ", "-"]),
+        ("AC\x00\x7f", ["\x00", "\x7f"]),
+        # byte 255 in Latin-1
+        ("AC\xff", ["\xff"]),
+        ("ACGé☃", ["é", "☃"]),
+    ],
+)
+def test_one_hot_unknown_letters(encode, seq, unknown):
+    with pytest.raises(ValueError, match=re.escape(str(sorted(unknown)))) as excinfo:
+        encode(seq)
+    assert not isinstance(excinfo.value, UnicodeError)
+
+
+@pytest.mark.parametrize("encode", [one_hot, one_hot_dna])
+def test_one_hot_iupac_as_neutral(encode):
+    expected = [[1, 0, 0, 0], [0.25] * 4, [0.25] * 4, [0.25] * 4]
+    assert np.array_equal(encode("ARyn", neutral_alphabet=["N", "R", "Y"]), expected)
+
+
+@pytest.mark.parametrize("encode", [tokenize, one_hot, one_hot_dna])
+@pytest.mark.parametrize("alphabet, neutral_alphabet", [("ACGTacgt", ["N"]), ("ACGT", ["N", "a"])])
+def test_one_hot_letters_differ_only_in_case(encode, alphabet, neutral_alphabet):
+    with pytest.raises(ValueError, match="differ only in case"):
+        encode("ACGT", alphabet, neutral_alphabet)
+
+
+@pytest.mark.parametrize("encode", [one_hot, one_hot_dna])
+def test_one_hot_letters_differ_only_in_case_same_encoding(encode):
+    assert np.array_equal(encode("Nn", neutral_alphabet=["N", "n"]), [[0.25] * 4] * 2)
+
+
+@pytest.mark.parametrize("alphabet, neutral_alphabet", [(["AC", "GT"], ["N"]), ("ACG\xff", ["N"]), (DNA, ["Ñ"])])
+def test_one_hot_dna_needs_single_ascii_letters(alphabet, neutral_alphabet):
+    with pytest.raises(ValueError, match="single ASCII characters"):
+        one_hot_dna("ACGT", alphabet, neutral_alphabet)
+
+
+@pytest.mark.parametrize(
+    "alphabet, seq",
+    [
+        (DNA, ""),
+        (DNA, "ACGTN"),
+        (DNA, "acgtn"),
+        (DNA, "AcGtN"),
+        ("ACGTSI", "SIsiN"),
+        # str.upper maps the non-ASCII "ſ" and "ı" to "S" and "I"
+        ("ACGTSI", "ſı"),
+    ],
+)
+@pytest.mark.parametrize("dtype", [None, np.float32, np.int8])
+def test_one_hot_dna_equals_one_hot(alphabet, seq, dtype):
+    expected = one_hot(seq, alphabet, ["N"], dtype=dtype)
+    result = one_hot_dna(seq, alphabet, ["N"], dtype=dtype)
+    assert result.dtype == expected.dtype
+    assert np.array_equal(result, expected)
+
+
+@pytest.mark.parametrize("seq", ["ACGTX", "acgtx", "SIsi", "ſı", "ACGT\xff"])
+def test_one_hot_dna_equals_one_hot_unknown_letters(seq):
+    with pytest.raises(ValueError) as excinfo:
+        one_hot(seq)
+    with pytest.raises(ValueError, match=re.escape(str(excinfo.value))):
+        one_hot_dna(seq)
 
 
 def test_fixed_len():
