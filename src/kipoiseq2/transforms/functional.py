@@ -31,6 +31,7 @@ def one_hot2string(arr, alphabet=DNA):
 def rc_dna(seq):
     """
     Reverse complement the DNA sequence
+
     >>> assert rc_dna("TATCG") == "CGATA"
     >>> assert rc_dna("tatcg") == "cgata"
     """
@@ -50,6 +51,7 @@ def rc_dna(seq):
 def rc_rna(seq):
     """
     Reverse complement the RNA sequence
+
     >>> assert rc_rna("UAUCG") == "CGAUA"
     """
     rc_hash = {
@@ -68,13 +70,10 @@ def rc_rna(seq):
 def tokenize(seq, alphabet=DNA, neutral_alphabet=["N"]):
     """Convert sequence to integers
 
-    # Arguments
-       seq: Sequence to encode
-       alphabet: Alphabet to use
-       neutral_alphabet: Neutral alphabet -> assign those values to -1
-
-    # Returns
-       List of length `len(seq)` with integers from `-1` to `len(alphabet) - 1`
+    :param seq: Sequence to encode
+    :param alphabet: Alphabet to use
+    :param neutral_alphabet: Neutral alphabet -> assign those values to -1
+    :returns: List of length ``len(seq)`` with integers from ``-1`` to ``len(alphabet) - 1``
     """
     # Req: all alphabets have the same length
     if isinstance(neutral_alphabet, str):
@@ -94,7 +93,8 @@ def tokenize(seq, alphabet=DNA, neutral_alphabet=["N"]):
 
 def token2one_hot(tokens, alphabet_size=4, neutral_value=0.25, dtype=None):
     """
-    Note: everything out of the alphabet is transformed into `np.zeros(alphabet_size)`
+    .. note::
+       everything out of the alphabet is transformed into ``np.zeros(alphabet_size)``
     """
     arr = np.zeros((len(tokens), alphabet_size), dtype=dtype)
 
@@ -135,18 +135,13 @@ def one_hot_dna(
 def pad(seq, length, value="N", anchor="center"):
     """Pad a sequence to a fixed length
 
-    # Arguments
-        seq: str or list of chars
-            Sequence to pad
-        length: int; Final length of the sequence. Must be at least `len(seq)`.
-        value: Neutral element to pad the sequence with. Can be `str` or `list`, of the same type as `seq`.
-            If `value` has several elements, it is repeated and cut to the pad length on each side,
-            e.g. `pad("A", 4, value="NM", anchor="end")` returns `"NMNA"`.
-        anchor: character; 'start', 'end' or 'center'
-            To which end to anchor the sequence when padding.
-
-    # Returns
-        Sequence of length `length`, of the same type as `seq`
+    :param seq: str or list of chars; Sequence to pad
+    :param length: int; Final length of the sequence. Must be at least ``len(seq)``.
+    :param value: Neutral element to pad the sequence with. Can be ``str`` or ``list``, of the same type as ``seq``.
+        If ``value`` has several elements, it is repeated and cut to the pad length on each side,
+        e.g. ``pad("A", 4, value="NM", anchor="end")`` returns ``"NMNA"``.
+    :param anchor: character; 'start', 'end' or 'center'. To which end to anchor the sequence when padding.
+    :returns: Sequence of length ``length``, of the same type as ``seq``
     """
     seq_len = len(seq)
     assert length >= seq_len
@@ -188,44 +183,38 @@ def trim(seq, length, anchor="center"):
 def fixed_len(seq, length, anchor="center", value="N"):
     """Pad or trim a sequence to a fixed length. Procedure:
 
-        1. Pad the sequence with N's or any other string or list element (`value`) if it is shorter than `length`
-        2. Trim the sequence if it is longer than `length`
+    1. Pad the sequence with N's or any other string or list element (``value``) if it is shorter than ``length``
+    2. Trim the sequence if it is longer than ``length``
 
-    # Note
-        See also: https://keras.io/preprocessing/sequence/
-        Applicable also for lists of characters
+    .. note::
+       See also: https://keras.io/preprocessing/sequence/
+       Applicable also for lists of characters
 
-    # Arguments
-        seq: str or list of chars
-            Sequence to pad or trim
-        length: int; Final length of the sequence.
-        anchor: character; 'start', 'end' or 'center'
-            To which end to anchor the sequence when trimming/padding. See examples below.
-        value: Neutral element to pad the sequence with. Can be `str` or `list`, of the same type as `seq`.
-            If `value` has several elements, it is repeated and cut to the pad length on each side (see `pad`).
+    :param seq: str or list of chars; Sequence to pad or trim
+    :param length: int; Final length of the sequence.
+    :param anchor: character; 'start', 'end' or 'center'. To which end to anchor the sequence when trimming/padding.
+        See examples below.
+    :param value: Neutral element to pad the sequence with. Can be ``str`` or ``list``, of the same type as ``seq``.
+        If ``value`` has several elements, it is repeated and cut to the pad length on each side (see :func:`pad`).
+    :returns: Sequence of length ``length``, of the same type as ``seq``
 
-    # Returns
-        Sequence of length `length`, of the same type as `seq`
+    Example:
 
-    # Example
+    >>> sequence = 'CTTACTCAGA'
+    >>> fixed_len(sequence, 10, anchor="start", value="N")
+    'CTTACTCAGA'
+    >>> fixed_len(sequence, 10, anchor="end", value="N")
+    'CTTACTCAGA'
+    >>> fixed_len(sequence, 4, anchor="center", value="N")
+    'ACTC'
 
-        ```python
-            >>> sequence = 'CTTACTCAGA'
-            >>> fixed_len(sequence, 10, anchor="start", value="N")
-            'CTTACTCAGA'
-            >>> fixed_len(sequence, 10, anchor="end", value="N")
-            'CTTACTCAGA'
-            >>> fixed_len(sequence, 4, anchor="center", value="N")
-            'ACTC'
-
-            >>> sequence = 'TCTTTA'
-            >>> fixed_len(sequence, 10, anchor="start", value="N")
-            'TCTTTANNNN'
-            >>> fixed_len(sequence, 10, anchor="end", value="N")
-            'NNNNTCTTTA'
-            >>> fixed_len(sequence, 4, anchor="center", value="N")
-            'CTTT'
-        ```
+    >>> sequence = 'TCTTTA'
+    >>> fixed_len(sequence, 10, anchor="start", value="N")
+    'TCTTTANNNN'
+    >>> fixed_len(sequence, 10, anchor="end", value="N")
+    'NNNNTCTTTA'
+    >>> fixed_len(sequence, 4, anchor="center", value="N")
+    'CTTT'
     """
     # neutral element type checking
     assert isinstance(value, list) or isinstance(value, str)
@@ -244,10 +233,9 @@ def fixed_len(seq, length, anchor="center", value="N"):
 def resize_interval(interval, width, anchor="center"):
     """Resize the Interval. Returns new Interval instance with correct length.
 
-    Arguments:
-        interval: an `Interval`. It is not modified.
-        width: desired width of the output interval
-        anchor (str): which part of the sequence should be anchored. Choices: 'start', 'center', or 'end'
+    :param interval: an :class:`~kipoiseq2.dataclasses.Interval`. It is not modified.
+    :param width: desired width of the output interval
+    :param anchor: str; which part of the sequence should be anchored. Choices: 'start', 'center', or 'end'
     """
     if anchor == "start":
         start = interval.start
@@ -346,35 +334,31 @@ _TRANSL_EXCEPT_SYMBOLS = frozenset(string.ascii_uppercase + "_")
 def translate(seq: str, transl_table: int = 1, transl_except: Mapping[int, str] | None = None) -> str:
     """Translate a DNA sequence into amino acids with an NCBI genetic code and annotated translation exceptions.
 
-    Stop codons become `_`, and translation continues after them.
+    Stop codons become ``_``, and translation continues after them.
 
     kipoiseq2 has no CDS model, so for the sequence of a variant the caller moves the exceptions.
     Keep an exception only at a reference codon that the variant leaves unchanged and in frame.
-    Downstream of an in-frame indel, add `(len(alt) - len(ref)) // 3` to the exception positions.
+    Downstream of an in-frame indel, add ``(len(alt) - len(ref)) // 3`` to the exception positions.
     Downstream of a frameshift, drop the exceptions.
     Then a new TGA elsewhere translates as a stop.
 
-    # Arguments
-        seq: DNA sequence in upper case, with a length that is a multiple of 3.
-            A partial last codon is allowed if `transl_except` covers it,
-            e.g. a mitochondrial stop that poly(A) completes.
-        transl_table: NCBI genetic code id, as in cdot `translation.transl_table` and in GFF.
-            1 and 11 use `TRANSLATION_TABLE`.
-            Table 11 differs from table 1 only in its start codons, so pass a non-AUG start as `{1: "M"}`.
-            2 uses the vertebrate mitochondrial code, where AGA and AGG are stops, ATA is M and TGA is W.
-        transl_except: map from a 1-based codon number to a one-letter amino acid, as in cdot `transl_except` and HGVS p.,
-            e.g. `{8: "U"}` for selenocysteine, `{1: "M"}` for a non-AUG start or `{n: "_"}` for a stop.
-            The exception sets the amino acid of its codon, so that codon is not looked up in the table.
-
-    # Returns
-        Amino acid sequence with one letter per codon
-
-    # Raises
-        ValueError: if `transl_table` is not 1, 2 or 11,
-            if a position in `transl_except` is not an int from 1 to the number of codons,
-            if an amino acid in `transl_except` is not an upper-case ASCII letter or `_`,
-            or if the length of `seq` is not a multiple of 3 and `transl_except` does not cover the partial last codon
-        KeyError: if a codon without an exception is not in the table, e.g. because it contains N
+    :param seq: DNA sequence in upper case, with a length that is a multiple of 3.
+        A partial last codon is allowed if ``transl_except`` covers it,
+        e.g. a mitochondrial stop that poly(A) completes.
+    :param transl_table: NCBI genetic code id, as in cdot ``translation.transl_table`` and in GFF.
+        1 and 11 use ``TRANSLATION_TABLE``.
+        Table 11 differs from table 1 only in its start codons, so pass a non-AUG start as ``{1: "M"}``.
+        2 uses the vertebrate mitochondrial code, where AGA and AGG are stops, ATA is M and TGA is W.
+    :param transl_except: map from a 1-based codon number to a one-letter amino acid,
+        as in cdot ``transl_except`` and HGVS p.,
+        e.g. ``{8: "U"}`` for selenocysteine, ``{1: "M"}`` for a non-AUG start or ``{n: "_"}`` for a stop.
+        The exception sets the amino acid of its codon, so that codon is not looked up in the table.
+    :returns: Amino acid sequence with one letter per codon
+    :raises ValueError: if ``transl_table`` is not 1, 2 or 11,
+        if a position in ``transl_except`` is not an int from 1 to the number of codons,
+        if an amino acid in ``transl_except`` is not an upper-case ASCII letter or ``_``,
+        or if the length of ``seq`` is not a multiple of 3 and ``transl_except`` does not cover the partial last codon
+    :raises KeyError: if a codon without an exception is not in the table, e.g. because it contains N
     """
     if transl_table not in _GENETIC_CODES:
         raise ValueError(f"transl_table must be one of {sorted(_GENETIC_CODES)}, got {transl_table!r}")

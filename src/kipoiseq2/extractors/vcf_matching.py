@@ -1,13 +1,13 @@
 """Match variants with the intervals they overlap.
 
-`SingleVariantMatcher` and `MultiVariantsMatcher` find the interval-variant
+:class:`SingleVariantMatcher` and :class:`MultiVariantsMatcher` find the interval-variant
 pairs with one polars-bio overlap join. The variants come from a VCF file,
 a polars DataFrame or LazyFrame, or Variant objects. Intervals and variants
 use 0-based, half-open coordinates: a variant overlaps an interval if
-`variant.start < interval.end` and `interval.start < variant.end`, with
-`variant.start = pos - 1` and `variant.end = variant.start + len(ref)`.
+``variant.start < interval.end`` and ``interval.start < variant.end``, with
+``variant.start = pos - 1`` and ``variant.end = variant.start + len(ref)``.
 
-The matchers need the `ranges` extra (polars and polars-bio).
+The matchers need the ``ranges`` extra (polars and polars-bio).
 """
 
 from __future__ import annotations
@@ -35,12 +35,9 @@ __all__ = [
 def intervals_to_polars(intervals: Iterable[Interval]) -> pl.DataFrame:
     """Convert intervals to a polars DataFrame.
 
-    Args:
-      intervals: Interval objects.
-
-    Returns:
-      DataFrame with the columns chrom, start, end (0-based, half-open)
-      and strand, one row per interval.
+    :param intervals: Interval objects.
+    :returns: DataFrame with the columns chrom, start, end (0-based, half-open)
+        and strand, one row per interval.
     """
     pl, _ = _import_polars()
     intervals = list(intervals)
@@ -58,13 +55,10 @@ def intervals_to_polars(intervals: Iterable[Interval]) -> pl.DataFrame:
 def variants_to_polars(variants: Iterable[Variant]) -> pl.DataFrame:
     """Convert variants to a polars DataFrame.
 
-    Args:
-      variants: Variant objects.
-
-    Returns:
-      DataFrame with the columns chrom, start (`pos - 1`), end
-      (`start + len(ref)`), pos (the 1-based VCF POS), ref and alt, one row
-      per variant.
+    :param variants: Variant objects.
+    :returns: DataFrame with the columns chrom, start (``pos - 1``), end
+        (``start + len(ref)``), pos (the 1-based VCF POS), ref and alt, one row
+        per variant.
     """
     pl, _ = _import_polars()
     variants = list(variants)
@@ -91,28 +85,25 @@ def variants_to_polars(variants: Iterable[Variant]) -> pl.DataFrame:
 def overlap_variants(intervals: pl.DataFrame, variants: pl.DataFrame) -> pl.DataFrame:
     """Find all interval-variant pairs that overlap, with one polars-bio overlap join.
 
-    Args:
-      intervals: DataFrame with the columns chrom, start and end in 0-based,
-        half-open coordinates, e.g. from `intervals_to_polars`.
-      variants: DataFrame with the columns chrom, start and end in 0-based,
-        half-open coordinates, e.g. from `variants_to_polars`.
+    :param intervals: DataFrame with the columns chrom, start and end in 0-based,
+        half-open coordinates, e.g. from :func:`intervals_to_polars`.
+    :param variants: DataFrame with the columns chrom, start and end in 0-based,
+        half-open coordinates, e.g. from :func:`variants_to_polars`.
+    :returns: One row per overlapping pair, sorted by variant_idx and then by
+        interval_idx. The columns are:
 
-    Returns:
-      One row per overlapping pair, sorted by variant_idx and then by
-      interval_idx. The columns are:
-
-      - all columns of `intervals` under their own names
-      - interval_idx: row number of the interval in `intervals`
-      - all columns of `variants` except chrom, with the prefix `variant_`
-        (e.g. variant_start, variant_end, variant_ref)
-      - variant_idx: row number of the variant in `variants`
+        - all columns of ``intervals`` under their own names
+        - interval_idx: row number of the interval in ``intervals``
+        - all columns of ``variants`` except chrom, with the prefix ``variant_``
+          (e.g. variant_start, variant_end, variant_ref)
+        - variant_idx: row number of the variant in ``variants``
     """
     # the order of the polars-bio output is not deterministic
     return _overlap_lazy(intervals, variants).collect().sort(["variant_idx", "interval_idx"])
 
 
 def _overlap_lazy(intervals: pl.DataFrame, variants: Union[pl.DataFrame, pl.LazyFrame]) -> pl.LazyFrame:
-    """Return the pairs of `overlap_variants` as a LazyFrame, without sorting.
+    """Return the pairs of :func:`overlap_variants` as a LazyFrame, without sorting.
 
     polars-bio indexes the second input (df2) in memory and streams the first
     input (df1). So the variants go into df1, and a large VCF does not need an
@@ -145,11 +136,28 @@ class BaseVariantMatcher:
     """
     Base variant intervals matcher
 
-    Attributes:
-      intervals: the intervals as a polars DataFrame, one row per interval in
+    Give one source of variants (``vcf_file`` or ``variants``) and the intervals.
+
+    :param vcf_file: path of a VCF file, read with :func:`~kipoiseq2.extractors.vcf.scan_vcf_variants`. Of its
+        columns, the matchers keep chrom, start, end, pos, ref, alt and
+        allele_idx.
+    :param variants: either a polars DataFrame or LazyFrame, or Variant
+        objects. A frame needs the columns chrom, pos (1-based), ref and
+        alt, with one ALT allele per row. Its other columns pass through
+        to the pairs.
+    :param intervals: either a polars DataFrame with the columns chrom, start
+        and end (0-based, half-open), an optional strand column and the
+        columns in ``interval_attrs``, or Interval objects (any iterable,
+        e.g. a list or a generator). The matchers
+        yield Interval objects as given, so they keep their name and attrs.
+    :param interval_attrs: columns of the ``intervals`` DataFrame to copy into
+        ``Interval.attrs``. Not valid with Interval objects.
+    :param variant_batch_size: number of variants per overlap join when
+        :class:`SingleVariantMatcher` yields the pairs in batches or one by one.
+    :ivar intervals: the intervals as a polars DataFrame, one row per interval in
         the given order. Its columns are chrom, start, end (0-based,
-        half-open), strand ("." if the `intervals` DataFrame has no strand
-        column) and the `interval_attrs` columns. The row number is the
+        half-open), strand ("." if the ``intervals`` DataFrame has no strand
+        column) and the ``interval_attrs`` columns. The row number is the
         interval_idx of the pairs.
     """
 
@@ -162,27 +170,6 @@ class BaseVariantMatcher:
         interval_attrs: Optional[Sequence[str]] = None,
         variant_batch_size: int = 10000,
     ):
-        """
-        Give one source of variants (`vcf_file` or `variants`) and the intervals.
-
-        Args:
-          vcf_file: path of a VCF file, read with `scan_vcf_variants`. Of its
-            columns, the matchers keep chrom, start, end, pos, ref, alt and
-            allele_idx.
-          variants: either a polars DataFrame or LazyFrame, or Variant
-            objects. A frame needs the columns chrom, pos (1-based), ref and
-            alt, with one ALT allele per row. Its other columns pass through
-            to the pairs.
-          intervals: either a polars DataFrame with the columns chrom, start
-            and end (0-based, half-open), an optional strand column and the
-            columns in `interval_attrs`, or Interval objects (any iterable,
-            e.g. a list or a generator). The matchers
-            yield Interval objects as given, so they keep their name and attrs.
-          interval_attrs: columns of the `intervals` DataFrame to copy into
-            `Interval.attrs`. Not valid with Interval objects.
-          variant_batch_size: number of variants per overlap join when
-            `SingleVariantMatcher` yields the pairs in batches or one by one.
-        """
         self._variants: Optional[List[Variant]] = None
         self._variant_frame = self._read_variants(vcf_file, variants)
         self.interval_attrs = list(interval_attrs or [])
@@ -243,7 +230,7 @@ class BaseVariantMatcher:
         )
 
     def _intervals_of(self, rows: pl.DataFrame) -> List[Interval]:
-        """Interval objects of the interval columns in `rows` (the interval frame or overlap_variants output)."""
+        """Interval objects of the interval columns in ``rows`` (the interval frame or overlap_variants output)."""
         if self._interval_objects is not None:
             return [self._interval_objects[i] for i in rows.get_column("interval_idx")]
         attrs = self.interval_attrs
@@ -253,7 +240,9 @@ class BaseVariantMatcher:
         ]
 
     def _variants_of(self, pairs: pl.DataFrame) -> List[Variant]:
-        """Variant objects of the variant columns in `pairs` (the output of `pairs` or `iter_batches`)."""
+        """Variant objects of the variant columns in ``pairs`` (the output of :meth:`pairs` or
+        :meth:`SingleVariantMatcher.iter_batches`).
+        """
         if self._variants is not None:
             return [self._variants[i] for i in pairs.get_column("variant_idx")]
         # an overlapping variant has the chrom of its interval
@@ -265,20 +254,18 @@ class BaseVariantMatcher:
 
         With a VCF file or a LazyFrame as the variant source, the variants
         stream through the overlap join. So for a large VCF, write the pairs
-        with `sink_parquet`, or process them with `collect_batches`.
+        with ``sink_parquet``, or process them with ``collect_batches``.
 
-        Returns:
-          The pairs as described in `overlap_variants`, in no fixed order.
-          variant_idx counts the variants in the order of the variant source.
+        :returns: The pairs as described in :func:`overlap_variants`, in no fixed order.
+            variant_idx counts the variants in the order of the variant source.
         """
         return _overlap_lazy(self.intervals, self._variant_frame)
 
     def pairs(self) -> pl.DataFrame:
         """Return all interval-variant pairs from one overlap join.
 
-        Returns:
-          The pairs as described in `overlap_variants`. variant_idx counts
-          the variants in the order of the variant source.
+        :returns: The pairs as described in :func:`overlap_variants`. variant_idx counts
+            the variants in the order of the variant source.
         """
         return self.scan_pairs().collect().sort(["variant_idx", "interval_idx"])
 
@@ -290,12 +277,12 @@ class SingleVariantMatcher(BaseVariantMatcher):
     """
     Match each variant with each interval it overlaps.
 
-    Iterating yields (Interval, Variant) pairs. `pairs()` returns all pairs
-    as one polars DataFrame, and `scan_pairs()` as a LazyFrame.
+    Iterating yields (Interval, Variant) pairs. :meth:`~BaseVariantMatcher.pairs` returns all pairs
+    as one polars DataFrame, and :meth:`~BaseVariantMatcher.scan_pairs` as a LazyFrame.
     """
 
     def iter_batches(self) -> Iterator[pl.DataFrame]:
-        """Yield the pairs of `variant_batch_size` variants at a time.
+        """Yield the pairs of ``variant_batch_size`` variants at a time.
 
         Each batch costs one overlap join. variant_idx counts the variants
         over all batches, and each batch is sorted by variant_idx and then
@@ -313,7 +300,7 @@ class SingleVariantMatcher(BaseVariantMatcher):
         Yield (Interval, Variant) for each overlapping pair.
 
         The pairs come in the order of the variant source, and per variant
-        in the order of the intervals. With Variant objects as `variants`,
+        in the order of the intervals. With Variant objects as ``variants``,
         it yields these objects. Otherwise it builds Variant objects from
         chrom, pos, ref and alt.
         """
