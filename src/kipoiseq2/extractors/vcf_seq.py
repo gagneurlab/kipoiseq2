@@ -1,9 +1,9 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
-from kipoiseq2.dataclasses import Interval
+from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors import BaseExtractor, FastaStringExtractor
 
 __all__ = ["VariantSeqExtractor"]
@@ -98,14 +98,19 @@ class VariantSeqExtractor(BaseExtractor):
 
     :param fasta_file: path to the fasta file (can be gzipped)
     :param reference_sequence: extractor returning the reference sequence given some interval
-    :param use_strand: bool; if True, the extracted sequence
+    :param use_strand: if True, the extracted sequence
         is reverse complemented in case interval.strand == "-"
+    :raises ValueError: if both or none of ``fasta_file`` and ``reference_sequence`` are given
     """
 
     _ref_seq_extractor: BaseExtractor
 
     def __init__(
-        self, fasta_file: Optional[str] = None, reference_sequence: Optional[BaseExtractor] = None, use_strand=True
+        self,
+        fasta_file: Optional[str] = None,
+        reference_sequence: Optional[BaseExtractor] = None,
+        *,
+        use_strand: bool,
     ):
         self._use_strand = use_strand
 
@@ -133,26 +138,25 @@ class VariantSeqExtractor(BaseExtractor):
 
     def extract(
         self,
-        interval,
-        variants,
-        anchor,
-        fixed_len=True,
-        use_strand=None,
-        chrom_len=math.inf,
-        is_padding=False,
-        **kwargs,
-    ):
+        interval: Interval,
+        variants: Iterable[Variant],
+        anchor: int,
+        fixed_len: bool = True,
+        use_strand: Optional[bool] = None,
+        chrom_len: float = math.inf,
+        is_padding: bool = False,
+    ) -> str:
         """
-        :param interval: Interval; the region of interest from
+        :param interval: the region of interest from
             which to query the sequence. 0-based
-        :param variants: List[Variant]; variants overlapping the ``interval``.
+        :param variants: variants overlapping the ``interval``.
             can also be indels. 1-based
         :param anchor: absolution position w.r.t. the interval start. (0-based).
             E.g. for an interval of ``chr1:10-20`` the anchor of 10 denotes
             the point chr1:10 in the 0-based coordinate system.
         :param fixed_len: if True, the return sequence will have the same length
             as the ``interval`` (e.g. ``interval.end - interval.start``)
-        :param use_strand: bool, optional; if True, the extracted sequence
+        :param use_strand: if True, the extracted sequence
             is reverse complemented in case interval.strand == "-".
             Overrides ``self.use_strand``
         :param chrom_len: length of the chromosome. If chrom_len == math.inf, the length of the chromosome is not

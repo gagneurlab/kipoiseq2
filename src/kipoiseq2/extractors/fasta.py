@@ -12,13 +12,13 @@ class FastaStringExtractor(BaseExtractor):
        If you wish to use it with multiprocessing,
        create a new extractor object in each process.
 
-    :param fasta_file: str; path to the fasta_file
-    :param use_strand: bool; if True, the extracted sequence
+    :param fasta_file: path to the fasta_file
+    :param use_strand: if True, the extracted sequence
         is reverse complemented in case interval.strand == "-"
-    :param force_upper: bool; Force uppercase output
+    :param force_upper: Force uppercase output
     """
 
-    def __init__(self, fasta_file, use_strand=False, force_upper=False):
+    def __init__(self, fasta_file: str, *, use_strand: bool, force_upper: bool = False):
         from pyfaidx import Fasta
 
         self.fasta_file = fasta_file
@@ -26,17 +26,15 @@ class FastaStringExtractor(BaseExtractor):
         self.fasta = Fasta(self.fasta_file)
         self.force_upper = force_upper
 
-    def extract(self, interval: Interval, use_strand=None, **kwargs) -> str:
+    def extract(self, interval: Interval, use_strand: bool | None = None) -> str:
         """
         Returns the FASTA sequence in some given interval as string
 
         :param interval: the interval to query
-        :param use_strand: bool, optional; if True, the extracted sequence
+        :param use_strand: if True, the extracted sequence
             is reverse complemented in case interval.strand == "-".
             Overrides ``self.use_strand``
-        :param ``**kwargs``:
         :returns: sequence of requested interval
-
         """
         # reverse-complement seq the negative strand
         if use_strand is None:

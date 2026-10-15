@@ -80,14 +80,28 @@ def test_reverse_complement():
 
 @pytest.fixture
 def variant_seq_extractor():
-    return VariantSeqExtractor(fasta_file)
+    return VariantSeqExtractor(fasta_file, use_strand=True)
 
 
 def test_variant_seq_extractor_reference_arguments():
     with pytest.raises(ValueError, match="exactly one of `fasta_file` and `reference_sequence`"):
-        VariantSeqExtractor()
+        VariantSeqExtractor(use_strand=True)
     with pytest.raises(ValueError, match="exactly one of `fasta_file` and `reference_sequence`"):
-        VariantSeqExtractor(fasta_file, reference_sequence=FastaStringExtractor(fasta_file))
+        VariantSeqExtractor(
+            fasta_file, reference_sequence=FastaStringExtractor(fasta_file, use_strand=False), use_strand=True
+        )
+
+
+def test_variant_seq_extractor_requires_use_strand_keyword():
+    with pytest.raises(TypeError, match="use_strand"):
+        VariantSeqExtractor(fasta_file)
+    with pytest.raises(TypeError, match="positional"):
+        VariantSeqExtractor(fasta_file, None, True)
+
+
+def test_variant_seq_extractor_extract_rejects_unknown_arguments(variant_seq_extractor):
+    with pytest.raises(TypeError, match="fixed_length"):
+        variant_seq_extractor.extract(Interval("chr1", 0, 3), [], anchor=0, fixed_length=False)
 
 
 def test__split_overlapping(variant_seq_extractor):
@@ -174,7 +188,7 @@ def test_extract(variant_seq_extractor):
 
     interval = Interval("chr1", 0, 3, strand="+")
     ref_seq_extractor = FastaStringExtractor(fasta_file, use_strand=True)
-    seq = VariantSeqExtractor(reference_sequence=ref_seq_extractor).extract(
+    seq = VariantSeqExtractor(reference_sequence=ref_seq_extractor, use_strand=True).extract(
         interval, variants, anchor=10, fixed_len=False
     )
     assert seq == "ACG"

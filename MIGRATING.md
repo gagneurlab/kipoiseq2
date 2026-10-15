@@ -176,3 +176,9 @@ The matchers use polars instead of pyranges:
 - With `anchor="center"`, they keep the letters that `Interval.resize` keeps of an interval from 0 to `len(seq)`, so the result can move by one letter.
   For example, `trim(seq, 7)` of a sequence of 10 letters returns `seq[1:8]` instead of `seq[2:9]`, and `pad("A", 4)` returns `"NANN"` instead of `"NNAN"`.
 - `trim(seq, 0, anchor="end")` returns `""` instead of `seq`.
+- `FastaStringExtractor` and `VariantSeqExtractor` require `use_strand` as a keyword argument.
+  In 0.1, `FastaStringExtractor` defaulted to `use_strand=False` and `VariantSeqExtractor` to `use_strand=True`.
+  To keep the old behavior, pass `use_strand=False` to `FastaStringExtractor` and `use_strand=True` to `VariantSeqExtractor`.
+  `force_upper` is keyword-only too: `FastaStringExtractor(path, True, True)` becomes `FastaStringExtractor(path, use_strand=True, force_upper=True)`.
+- `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` raise a TypeError for unknown arguments.
+  In 0.1, they ignored them, so a typo like `fixed_length=False` had no effect.
