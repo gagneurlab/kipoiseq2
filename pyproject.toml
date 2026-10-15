@@ -33,6 +33,7 @@ ranges = [
 
 [project.urls]
 "Homepage" = "https://github.com/gagneurlab/kipoiseq2"
+"Documentation" = "https://gagneurlab.github.io/kipoiseq2/"
 
 [dependency-groups]
 dev = [

@@ -108,7 +108,7 @@ Set the environment variable `TQDM_DISABLE=1` to turn it off.
 
 More examples:
 - The tests in [tests/](tests/) show the usage of every extractor and transform.
-- API docs: the docstrings in [src/kipoiseq2/extractors](src/kipoiseq2/extractors) and [src/kipoiseq2/transforms](src/kipoiseq2/transforms) (functional and class-based).
+- API docs: <https://gagneurlab.github.io/kipoiseq2/>
 
 ## Migrating from kipoiseq
 

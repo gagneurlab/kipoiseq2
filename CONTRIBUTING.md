@@ -154,11 +154,13 @@ Before you submit a pull request, check that it meets these guidelines:
 
 ## Releases
 
-Versioning and tagging are automated by [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release-please.yml`). Publishing is handled by `.github/workflows/publish.yml`:
+Versioning and tagging are automated by [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release-please.yml`). Publishing is handled by `.github/workflows/publish.yml` and `.github/workflows/docs.yml`:
 
 - release-please watches commits on `main` and opens/maintains a release PR that bumps `pyproject.toml` and `src/kipoiseq2/__init__.py` and updates `CHANGELOG.md`.
 - Merging the release PR cuts a `vX.Y.Z` tag and a GitHub release.
 - `release-please.yml` then starts `publish.yml` with `workflow_dispatch` for the new tag. `publish.yml` builds sdist + wheel and uploads to PyPI via trusted publishing (OIDC). It can also be triggered by hand from the Actions tab.
 - `release-please.yml` does not call `publish.yml` via `workflow_call`, because PyPI then rejects the upload's attestation: the attestation names `release-please.yml`, but the trusted publisher on PyPI is `publish.yml`.
+- `release-please.yml` also starts `docs.yml` with `workflow_dispatch`, on `main` with the new tag as its `ref` input. `docs.yml` builds the docs of that tag and deploys them to GitHub Pages at <https://gagneurlab.github.io/kipoiseq2/>. It runs on `main`, because the `github-pages` environment allows deployments only from the default branch. It can also be triggered by hand from the Actions tab.
+- For `docs.yml` to deploy, GitHub Pages must use "GitHub Actions" as its source (Settings → Pages → Build and deployment).
 
 Pull requests are squash-merged, so the pull request title becomes the commit message on `main`. Use [Conventional Commits](https://www.conventionalcommits.org/) for it so release-please can pick the next version (`fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → major).
