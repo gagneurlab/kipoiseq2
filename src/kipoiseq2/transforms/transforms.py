@@ -3,6 +3,16 @@ import numpy as np
 from kipoiseq2.transforms import functional as F
 from kipoiseq2.utils import DNA, parse_alphabet, parse_dtype
 
+__all__ = [
+    "Compose",
+    "DummyAxis",
+    "SwapAxes",
+    "ResizeInterval",
+    "OneHot",
+    "ReorderedOneHot",
+    "SplitSplicingSeq",
+]
+
 
 class Compose:
     """Composes several transforms together.

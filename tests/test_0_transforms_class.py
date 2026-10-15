@@ -1,5 +1,6 @@
 import pytest
 
+import kipoiseq2.transforms
 from kipoiseq2.transforms.transforms import Compose, OneHot, ReorderedOneHot, SplitSplicingSeq
 
 
@@ -60,3 +61,19 @@ def test_SplitSplicingSeq():
 
 def test_ResizeInterval():
     pass
+
+
+def test_transforms_namespace():
+    public = {name for name in vars(kipoiseq2.transforms) if not name.startswith("_")}
+    # functional and transforms are the submodules
+    assert public == {
+        "functional",
+        "transforms",
+        "Compose",
+        "DummyAxis",
+        "SwapAxes",
+        "ResizeInterval",
+        "OneHot",
+        "ReorderedOneHot",
+        "SplitSplicingSeq",
+    }
