@@ -6,8 +6,9 @@ Sequence extractors and transforms for DNA sequence-based models.
 kipoiseq2 extracts reference and variant sequences from FASTA and VCF files and encodes them for model input, e.g. as one-hot arrays.
 
 kipoiseq2 is the successor of [kipoiseq](https://github.com/kipoi/kipoiseq) without the Kipoi model zoo dataloaders (`kipoiseq.dataloaders`) and without the kipoi dependencies.
-Its sequence extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
-kipoiseq2 reads VCF files as polars tables with polars-bio instead of cyvcf2, see [Migrating from kipoiseq](https://github.com/gagneurlab/kipoiseq2/blob/main/MIGRATING.md).
+Its sequence extractors, transforms, `Interval` and `Variant` are based on those of kipoiseq and are imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
+kipoiseq2 reads VCF files as polars tables with polars-bio instead of cyvcf2.
+[Migrating from kipoiseq](https://github.com/gagneurlab/kipoiseq2/blob/main/MIGRATING.md) lists the differences.
 
 ## Installation
 
