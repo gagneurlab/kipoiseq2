@@ -42,7 +42,7 @@ If you are proposing a feature:
 - create the corresponding branch
 - develop
 - write unit tests in tests/
-- write documentation in markdown (see other functions for example)
+- write docstrings in reStructuredText (see [Documentation](#documentation))
 - push the changes
 - make a pull request with a [Conventional Commits](https://www.conventionalcommits.org/) title (see [Releases](#releases))
 - once the pull request is merged, the issue will be closed
@@ -82,6 +82,7 @@ Available environments (defined in `pyproject.toml`):
 | `format-check`  | `ruff format --check .`                  |
 | `lints`         | `ruff check .`                           |
 | `typecheck`     | `mypy src/kipoiseq2`                     |
+| `docs`          | Build the docs into `docs/_build/html`   |
 | `py3.12`        | Run pytest under Python 3.12             |
 | `py3.13`        | Run pytest under Python 3.13             |
 | `py3.14`        | Run pytest under Python 3.14             |
@@ -110,6 +111,38 @@ uv run pytest -n 4
 # Run a single test
 uv run pytest tests/test_1_extractors.py::test_name -x
 ```
+
+## Documentation
+
+The docs at <https://gagneurlab.github.io/kipoiseq2/> are built with [Sphinx](https://www.sphinx-doc.org/) from the docstrings in `src/kipoiseq2` and from `README.md`, `MIGRATING.md` and `CHANGELOG.md`.
+The API pages in `docs/api/` list the modules with `automodule`, so a new module needs an entry there.
+
+Write docstrings in reStructuredText, with field lists for the parameters, the return value and the exceptions:
+
+```python
+def trim(seq, length, anchor="center"):
+    """Trim the sequence to ``length``.
+
+    :param seq: the sequence to trim
+    :param length: the length of the trimmed sequence
+    :param anchor: the part of ``seq`` to keep: ``"start"``, ``"center"`` or ``"end"``
+    :returns: the trimmed sequence
+    :raises ValueError: if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``
+    """
+```
+
+- Do not add `:type:` or `:rtype:` fields. The docs take the types from the type annotations.
+- Document the constructor parameters in the class docstring, not in `__init__`. The docs show only the class docstring.
+- Refer to kipoiseq2 objects with the roles `:class:`, `:func:`, `:meth:` and `:attr:`. Outside the module of the object, give its full path, e.g. `` :class:`~kipoiseq2.dataclasses.Interval` ``.
+
+Build the docs locally with:
+
+```bash
+uv run tox -e docs
+```
+
+The build treats warnings as errors.
+Open `docs/_build/html/index.html` in a browser to view the result.
 
 ## Pull request guidelines
 

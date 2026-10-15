@@ -50,6 +50,11 @@ lint = [
     "ruff",
     "mypy",
 ]
+docs = [
+    "sphinx",
+    "furo",
+    "myst-parser",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kipoiseq2"]
@@ -72,7 +77,7 @@ ignore = [
 
 [tool.tox]
 requires = ["tox>=4", "tox-uv"]
-env_list = ["format-check", "lints", "typecheck", "py3.12", "py3.13", "py3.14"]
+env_list = ["format-check", "lints", "typecheck", "docs", "py3.12", "py3.13", "py3.14"]
 isolated_build = true
 
 [tool.tox.env_run_base]
@@ -99,6 +104,12 @@ runner = "uv-venv-lock-runner"
 dependency_groups = ["lint"]
 extras = ["ranges"]
 commands = [["mypy", "src/kipoiseq2"]]
+
+[tool.tox.env."docs"]
+runner = "uv-venv-lock-runner"
+dependency_groups = ["docs"]
+extras = ["ranges"]
+commands = [["sphinx-build", "-W", "--keep-going", "-b", "html", "docs", "docs/_build/html"]]
 
 [tool.mypy]
 python_version = "3.12"
