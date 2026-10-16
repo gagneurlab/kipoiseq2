@@ -55,20 +55,21 @@ class FastaStringExtractor(BaseExtractor):
     :param fasta_file: path to the fasta_file
     :param use_strand: if True, the extracted sequence
         is reverse complemented in case interval.strand == "-"
-    :param force_upper: Force uppercase output
+    :param uppercase: if True, uppercase the sequences, so that the case-sensitive encoders of
+        :mod:`kipoiseq2.encoders` take them as they are.
+        If False, keep the case of the file, e.g. the lowercase letters of soft-masked repeats.
     :raises ValueError: if the file is compressed with gzip but not with bgzip,
         or if it is compressed with bgzip and its name does not end in ``.gz`` or ``.bgz``
     :raises ImportError: if the file is compressed with bgzip and Biopython is missing
     """
 
-    def __init__(self, fasta_file: str | os.PathLike[str], *, use_strand: bool, force_upper: bool = False):
+    def __init__(self, fasta_file: str | os.PathLike[str], *, use_strand: bool, uppercase: bool = True):
         from pyfaidx import Fasta
 
         self.fasta_file = os.fspath(fasta_file)
         _check_compression(self.fasta_file)
         self._use_strand = use_strand
-        self.fasta = Fasta(self.fasta_file)
-        self.force_upper = force_upper
+        self.fasta = Fasta(self.fasta_file, sequence_always_upper=uppercase)
 
     def extract(self, interval: Interval, use_strand: bool | None = None) -> str:
         """
@@ -78,7 +79,7 @@ class FastaStringExtractor(BaseExtractor):
         :param use_strand: if True, the extracted sequence
             is reverse complemented in case interval.strand == "-".
             Overrides ``self.use_strand``
-        :returns: sequence of requested interval
+        :returns: sequence of requested interval, in uppercase unless the extractor was built with ``uppercase=False``
         """
         # reverse-complement seq the negative strand
         if use_strand is None:
@@ -86,12 +87,7 @@ class FastaStringExtractor(BaseExtractor):
         rc = use_strand and interval.strand == "-"
 
         # pyfaidx wants a 1-based interval
-        seq = str(self.fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
-
-        # optionally, force upper-case letters
-        if self.force_upper:
-            seq = seq.upper()
-        return seq
+        return str(self.fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
 
     def close(self):
         # self.fasta is missing if __init__ failed, e.g. for a missing file

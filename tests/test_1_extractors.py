@@ -14,14 +14,14 @@ comp.update({k.lower(): v.lower() for k, v in comp.items()})
 
 
 @pytest.mark.parametrize("use_strand", [True, False])
-@pytest.mark.parametrize("force_upper", [True, False])
-def test_fastareader(use_strand, force_upper):
+@pytest.mark.parametrize("uppercase", [True, False])
+def test_fastareader(use_strand, uppercase):
     fp = "tests/data/sample.fasta"
     with open(fp, "r") as ifh:
         for i, s in enumerate(ifh):
             if i == 1:
                 fasta_str = s.lstrip()
-    fr = FastaStringExtractor(fp, use_strand=use_strand, force_upper=force_upper)
+    fr = FastaStringExtractor(fp, use_strand=use_strand, uppercase=uppercase)
     intervals = Interval("chr1", 0, 2, strand="-"), Interval("chr1", 3, 4)
 
     for interval in intervals:
@@ -30,10 +30,19 @@ def test_fastareader(use_strand, force_upper):
         if use_strand and interval.strand == "-":
             ref_seq = list(ref_seq)[::-1]
             ref_seq = "".join([comp[el] for el in ref_seq])
-        if force_upper:
-            assert seq == ref_seq.upper()
-        else:
-            assert seq == ref_seq
+        assert seq == (ref_seq.upper() if uppercase else ref_seq)
+
+
+def test_fasta_extractor_uppercases_by_default(tmp_path):
+    fasta_file = tmp_path / "soft.fa"
+    fasta_file.write_text(">chr1\nACgtnN\n")
+    interval = Interval("chr1", 0, 6, strand="-")
+    assert FastaStringExtractor(fasta_file, use_strand=True).extract(interval) == "NNACGT"
+    soft = FastaStringExtractor(fasta_file, use_strand=True, uppercase=False)
+    assert soft.extract(interval) == "NnacGT"
+    # uppercase is keyword-only
+    with pytest.raises(TypeError):
+        FastaStringExtractor(fasta_file, True, False)
 
 
 def test_base_extractor_extract_is_abstract():

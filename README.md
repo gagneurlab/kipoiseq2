@@ -29,8 +29,8 @@ from kipoiseq2.extractors import FastaStringExtractor, VariantSeqExtractor
 
 interval = Interval("chr1", 10, 20, strand="+")
 
-# reference sequence, uppercased because the encoders are case-sensitive
-fasta = FastaStringExtractor("genome.fa", use_strand=True, force_upper=True)
+# reference sequence, uppercase by default because the encoders are case-sensitive
+fasta = FastaStringExtractor("genome.fa", use_strand=True)
 seq = fasta.extract(interval)  # 10 bp string
 encoded = Encoder().one_hot(seq)  # uint8 array of shape (10, 4)
 
@@ -67,7 +67,8 @@ Tokenizer().tokenize("ACGTNR")  # array([0, 1, 2, 3, 4, 5], dtype=uint8), the co
 
 The encoders are case-sensitive, and a letter that is not in the alphabet raises a ValueError that names it.
 So with `DNA`, a lowercase letter of a soft-masked repeat raises this ValueError.
-Sequences must be uppercase at the source: uppercase them with `seq.upper()`, or read them with `FastaStringExtractor(force_upper=True)`.
+`FastaStringExtractor` uppercases the sequences by default, so soft-masked repeats encode like other bases.
+For sequences from other sources, call `seq.upper()` first.
 `DNA` and `RNA` have `N` and the other IUPAC ambiguity codes, e.g. `R` for A or G.
 GRCh37 and GRCh38 contain a few of them besides `N`.
 `Encoder` encodes the codes as rows of zeros by default.

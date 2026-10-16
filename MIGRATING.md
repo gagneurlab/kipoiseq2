@@ -87,7 +87,7 @@ The matchers use polars instead of pyranges:
   With `"ones"`, they are 1 in the columns of their bases, e.g. `[1, 0, 1, 0]` for `R`.
   All other unknown letters raise the ValueError.
 - The lookup is case-sensitive, so a lowercase letter, e.g. of a soft-masked repeat, also raises this ValueError.
-  Uppercase the sequence at the source, e.g. with `seq.upper()` or `FastaStringExtractor(force_upper=True)`.
+  Uppercase the sequence at the source, e.g. with `seq.upper()`, or read it with `FastaStringExtractor`, which uppercases by default.
   If the alphabet has the uppercase form of a lowercase letter, the message points to both.
 - The encoders raise a ValueError instead of an AssertionError if the length of `seq` is not a multiple of the letter length.
   They raise a TypeError instead of a ValueError if `seq` is not a str.
@@ -179,8 +179,10 @@ The matchers use polars instead of pyranges:
 - `FastaStringExtractor` and `VariantSeqExtractor` require `use_strand` as a keyword argument.
   In 0.1, `FastaStringExtractor` defaulted to `use_strand=False` and `VariantSeqExtractor` to `use_strand=True`.
   To keep the old behavior, pass `use_strand=False` to `FastaStringExtractor` and `use_strand=True` to `VariantSeqExtractor`.
-  `force_upper` is keyword-only too: `FastaStringExtractor(path, True, True)` becomes `FastaStringExtractor(path, use_strand=True, force_upper=True)`.
 - `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` raise a TypeError for unknown arguments.
   In 0.1, they ignored them, so a typo like `fixed_length=False` had no effect.
 - `FastaStringExtractor` raises a ValueError for a FASTA file that is compressed with gzip instead of bgzip, and an ImportError for a bgzip file if Biopython is missing.
   In 0.1, pyfaidx raised an ImportError about Biopython for a gzip file whose name ends in `.gz`, and a UnicodeDecodeError for other gzip files.
+- `force_upper` of `FastaStringExtractor` is now `uppercase=True` by default, so the extracted sequences are uppercase.
+  `Encoder` and `Tokenizer` are case-sensitive, so they take these sequences as they are.
+  Pass `uppercase=False` to keep the lowercase letters of soft-masked repeats. `uppercase` is keyword-only.
