@@ -7,7 +7,12 @@ name = "kipoiseq2"
 version = "0.1.0"
 description = "Sequence extractors and transforms for DNA and RNA sequence models"
 authors = [
-    { name = "Kipoi team", email = "avsec@in.tum.de" },
+    { name = "Florian Hölzlwimmer", email = "git.ich@frhoelzlwimmer.de" },
+    # the authors of kipoiseq, which kipoiseq2 is forked from
+    { name = "Kipoi team" },
+]
+maintainers = [
+    { name = "Florian Hölzlwimmer", email = "git.ich@frhoelzlwimmer.de" },
 ]
 readme = "README.md"
 license = "MIT"
