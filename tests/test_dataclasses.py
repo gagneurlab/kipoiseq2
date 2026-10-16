@@ -13,8 +13,13 @@ Tests to perform:
 - shift, swapt_strand, trim, etc
 """
 
+import copy
+import dataclasses
+import pickle
+import re
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from kipoiseq2.dataclasses import Interval, Variant
@@ -90,42 +95,25 @@ def test_interval():
     assert interval.end == 20
     assert interval.chrom == "chr1"
     assert interval.name == ""
-    assert isinstance(interval.attrs, dict)
-    assert len(interval.attrs) == 0
-    interval.attrs["test"] = 10
-    assert interval.attrs["test"] == 10
+    assert interval.score == 0
+    assert interval.attrs == {}
     assert isinstance(str(interval), str)
     assert interval.neg_strand
 
-    assert interval.width() == 10
-    assert len(interval) == 10
+    assert interval.width == 10
 
     # __str__, from_str
     assert interval == Interval.from_str(str(interval))
-
-    # make sure the original got unchangd
-    i2 = interval.copy()
-    interval.attrs["test"] = 20
-    assert i2.attrs["test"] == 10
 
     # hash test
     assert isinstance(hash(interval), int)
     assert hash(interval) == hash(Interval.from_str(str(interval)))
 
-    # fixed arguments
-    with pytest.raises(AttributeError):
-        interval.chrom = "asd"
-    with pytest.raises(AttributeError):
-        interval.start = 10
-    with pytest.raises(AttributeError):
-        interval.end = 300
-    with pytest.raises(AttributeError):
-        interval.strand = "+"
+    # the fields are read-only
+    for field_name in ["chrom", "start", "end", "strand", "name", "score", "attrs", "width"]:
+        with pytest.raises(AttributeError):
+            setattr(interval, field_name, None)
     assert interval.strand == "-"
-
-    # non-fixed arguments
-    interval.name = "asd"
-    interval.score = 10
 
     assert interval.unstrand().strand == "."
 
@@ -172,13 +160,12 @@ def test_interval():
     assert interval.strand == "-"
     assert i2.strand == "+"
     assert i2.strand == "+"
-    assert len(i2) == 10
+    assert i2.width == 10
     i2 = i2.resize(11)
     assert i2.start == 9 and i2.end == 20
 
-    i2 = interval.copy()
-    assert i2.center(use_strand=True) == 15
-    assert i2.center(use_strand=False) == 15
+    assert interval.center(use_strand=True) == 15
+    assert interval.center(use_strand=False) == 15
 
     i2 = interval.swap_strand()
     assert i2.strand == "+"
@@ -205,10 +192,112 @@ def test_interval_eq_other_types(other):
     assert interval != other
 
 
-def test_interval_eq_same_attributes():
+def test_interval_eq_only_intervals():
+    # an object with the same attributes, e.g. a kipoiseq Interval, is not equal
     interval = Interval("chr1", 10, 20, strand="-")
-    assert interval == SimpleNamespace(chrom="chr1", start=10, end=20, strand="-")
-    assert interval != SimpleNamespace(chrom="chr1", start=10, end=20, strand="+")
+    assert interval != SimpleNamespace(chrom="chr1", start=10, end=20, strand="-", name="", score=0, attrs={})
+
+
+def test_interval_eq_all_fields():
+    interval = Interval("chr1", 10, 20, strand="-", name="a", score=1, attrs={"gene": "A"})
+    assert interval == Interval("chr1", 10, 20, strand="-", name="a", score=1.0, attrs={"gene": "A"})
+    assert interval != Interval("chr1", 10, 20, strand="-", name="b", score=1, attrs={"gene": "A"})
+    assert interval != Interval("chr1", 10, 20, strand="-", name="a", score=2, attrs={"gene": "A"})
+    assert interval != Interval("chr1", 10, 20, strand="-", name="a", score=1, attrs={"gene": "B"})
+    # the hash leaves out attrs, so attrs may hold unhashable values
+    other = Interval("chr1", 10, 20, strand="-", name="a", score=1, attrs={"gene": ["B"]})
+    assert hash(interval) == hash(other)
+    assert len({interval, other}) == 2
+
+
+@pytest.mark.parametrize(
+    "args, kwargs, error, match",
+    [
+        ((1, 10, 20), {}, TypeError, "^chrom must be a str, not int$"),
+        (("chr1", 10.0, 20), {}, TypeError, "^start must be an int, not float$"),
+        (("chr1", "10", 20), {}, TypeError, "^start must be an int, not str$"),
+        (("chr1", True, 20), {}, TypeError, "^start must be an int, not bool$"),
+        (("chr1", 10, None), {}, TypeError, "^end must be an int, not NoneType$"),
+        (("chr1", 20, 10), {}, ValueError, "^start must not be greater than end, got start=20, end=10$"),
+        (("chr1", 10, 20), {"strand": "x"}, ValueError, re.escape("""strand must be "+", "-" or ".", got 'x'""")),
+        (("chr1", 10, 20), {"strand": None}, TypeError, "^strand must be a str, not NoneType$"),
+        (("chr1", 10, 20), {"name": 1}, TypeError, "^name must be a str, not int$"),
+        (("chr1", 10, 20), {"score": "1"}, TypeError, "^score must be a number, not str$"),
+        (("chr1", 10, 20), {"score": float("nan")}, ValueError, "^score must not be NaN$"),
+        (("chr1", 10, 20), {"attrs": [("gene", "A")]}, TypeError, "^attrs must be a mapping, not list$"),
+        # strand, name, score and attrs are keyword-only
+        (("chr1", 10, 20, "-"), {}, TypeError, "positional argument"),
+    ],
+)
+def test_interval_invalid(args, kwargs, error, match):
+    with pytest.raises(error, match=match):
+        Interval(*args, **kwargs)
+
+
+def test_interval_numpy_integers():
+    interval = Interval("chr1", np.int64(10), np.int32(20))
+    assert type(interval.start) is int and type(interval.end) is int
+    assert interval == Interval("chr1", 10, 20)
+
+
+def test_interval_attrs_are_a_read_only_copy():
+    attrs = {"gene": "A"}
+    interval = Interval("chr1", 10, 20, attrs=attrs)
+    attrs["gene"] = "B"
+    assert interval.attrs == {"gene": "A"}
+    with pytest.raises(TypeError):
+        interval.attrs["gene"] = "C"
+
+
+def test_interval_pickle_and_copy():
+    interval = Interval("chr1", 10, 20, strand="-", name="a", score=1.5, attrs={"gene": "A"})
+    copies = [pickle.loads(pickle.dumps(interval, protocol)) for protocol in range(pickle.HIGHEST_PROTOCOL + 1)]
+    for i2 in [*copies, copy.copy(interval), copy.deepcopy(interval)]:
+        assert i2 == interval
+        assert repr(i2) == repr(interval)
+        with pytest.raises(TypeError):
+            i2.attrs["gene"] = "B"
+
+
+def test_interval_asdict():
+    interval = Interval("chr1", 10, 20, strand="-", name="a", score=1.5, attrs={"gene": "A"})
+    fields = dataclasses.asdict(interval)
+    assert fields == {
+        "chrom": "chr1",
+        "start": 10,
+        "end": 20,
+        "strand": "-",
+        "name": "a",
+        "score": 1.5,
+        "attrs": {"gene": "A"},
+    }
+    assert dataclasses.astuple(interval)[:3] == ("chr1", 10, 20)
+
+
+@pytest.mark.parametrize(
+    "interval",
+    [
+        Interval("chr1", -5, 10, strand="-"),
+        Interval("chr1", -10, -5),
+        Interval("HLA-A*01:01:01:01", 0, 10, strand="+"),
+    ],
+)
+def test_interval_from_str(interval):
+    assert Interval.from_str(str(interval)) == interval
+
+
+@pytest.mark.parametrize("s", ["chr1:10-20", "chr1:10:20:+", "chr1:a-20:+", "chr1:10-20-30:+"])
+def test_interval_from_str_invalid(s):
+    with pytest.raises(ValueError, match="^s must have the format"):
+        Interval.from_str(s)
+
+
+def test_interval_methods_raise_for_start_greater_than_end():
+    with pytest.raises(ValueError, match="^start must not be greater than end"):
+        Interval("chr1", 10, 20).slop(upstream=-6, downstream=-6)
+    # the interval lies after the chromosome end
+    with pytest.raises(ValueError, match="^start must not be greater than end"):
+        Interval("chr1", 25, 30).truncate(20)
 
 
 def test_interval_resize_use_strand():
@@ -264,19 +353,18 @@ def test_interval_slop_without_use_strand(strand):
 @pytest.mark.parametrize(
     "method",
     [
-        lambda i: i.trim(0, 10),
-        lambda i: i.truncate(chrom_len=20),
-        lambda i: i.resize(10),
-        lambda i: i.shift(0),
-        lambda i: i.slop(),
+        lambda i: i.trim(1, 5),
+        lambda i: i.truncate(chrom_len=15),
+        lambda i: i.resize(4),
+        lambda i: i.shift(1),
+        lambda i: i.slop(upstream=1),
+        lambda i: i.unstrand(),
+        lambda i: i.swap_strand(),
     ],
-    ids=["trim", "truncate", "resize", "shift", "slop"],
+    ids=["trim", "truncate", "resize", "shift", "slop", "unstrand", "swap_strand"],
 )
-def test_interval_methods_return_a_copy(method):
-    interval = Interval("chr1", 10, 20, strand="-", attrs={"gene": "A"})
-    # the method changes nothing here, but still returns a new interval
+def test_interval_methods_keep_name_score_and_attrs(method):
+    interval = Interval("chr1", 10, 20, strand="-", name="a", score=1.5, attrs={"gene": "A"})
     i2 = method(interval)
-    assert i2 == interval
-    assert i2 is not interval
-    i2.attrs["gene"] = "B"
-    assert interval.attrs["gene"] == "A"
+    assert i2 != interval
+    assert (i2.chrom, i2.name, i2.score, i2.attrs) == ("chr1", "a", 1.5, {"gene": "A"})

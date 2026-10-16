@@ -155,9 +155,9 @@ def resize_interval(interval, width, anchor="center"):
     :raises ValueError: if ``anchor`` is not 'start', 'center' or 'end'
     """
     if anchor == "start":
-        return interval.slop(downstream=width - interval.width(), use_strand=False)
+        return interval.slop(downstream=width - interval.width, use_strand=False)
     elif anchor == "end":
-        return interval.slop(upstream=width - interval.width(), use_strand=False)
+        return interval.slop(upstream=width - interval.width, use_strand=False)
     elif anchor == "center":
         return interval.resize(width)
     else:

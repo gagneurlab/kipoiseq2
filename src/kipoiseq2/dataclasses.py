@@ -1,8 +1,12 @@
 """Data classes for the major objects: Interval and Variant."""
 
 import math
+import numbers
+import re
+from collections.abc import Iterator, Mapping
 from copy import deepcopy
-from typing import Optional
+from dataclasses import dataclass, field, replace
+from typing import Any, Literal, Optional, cast, get_args
 
 
 class Variant:
@@ -111,75 +115,145 @@ class Variant:
         )
 
 
+class _ReadOnlyDict(Mapping[str, Any]):
+    """Read-only copy of a mapping, for :attr:`Interval.attrs`.
+
+    Unlike a ``types.MappingProxyType``, it can be pickled and deep-copied, e.g. by ``dataclasses.asdict``.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: Mapping[str, Any]) -> None:
+        self._data = dict(data)
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __repr__(self) -> str:
+        return repr(self._data)
+
+    def __reduce__(self) -> tuple[type["_ReadOnlyDict"], tuple[dict[str, Any]]]:
+        return _ReadOnlyDict, (self._data,)
+
+
+_Strand = Literal["+", "-", "."]
+"""Type of the strand of an :class:`Interval`, with ``"."`` for an unknown strand."""
+_STRANDS = get_args(_Strand)
+"""The values of ``_Strand``, for the checks at runtime."""
+
+
+def _check_int(value: object, name: str) -> None:
+    """Raise a TypeError if ``value`` is not an int. A bool does not count as an int."""
+    if not isinstance(value, numbers.Integral) or isinstance(value, bool):
+        raise TypeError(f"{name} must be an int, not {type(value).__name__}")
+
+
+@dataclass(frozen=True, init=False, repr=False)
 class Interval:
-    """Container for genomic interval(s)
+    """Genomic interval.
 
     Coordinates are 0-based, half-open: the interval covers the bases
     ``start`` to ``end - 1``, and its width is ``end - start``. This is the
     BED convention. In 1-based VCF or GTF positions, the interval covers
     ``start + 1`` to ``end``.
 
-    :param chrom: Chromosome
-    :param start: 0-based start position (inclusive)
-    :param end: 0-based end position (exclusive)
+    An Interval is immutable. The constructor checks the fields once,
+    and methods such as :meth:`resize` return a new Interval.
+    Two intervals are equal if all their fields are equal.
+    The hash leaves out ``attrs``, so an Interval with any ``attrs`` can be a dict key.
+
+    :param chrom: chromosome
+    :param start: 0-based start position (inclusive). It may be negative, e.g. after :meth:`shift`.
+    :param end: 0-based end position (exclusive), at least ``start``
+    :param strand: ``"+"``, ``"-"`` or ``"."`` for an unknown strand
     :param name: interval name
     :param score: interval score
-    :param strand: interval strand ("+", "-" or "." for unknown strand)
-    :param attrs: additional attributes provided as a dictionary
+    :param attrs: additional attributes. The interval keeps a read-only copy.
+    :raises TypeError: if ``chrom`` or ``name`` is not a str, if ``start`` or ``end`` is not an int,
+        if ``strand`` is not a str, if ``score`` is not a number, or if ``attrs`` is not a mapping
+    :raises ValueError: if ``start`` is greater than ``end``, if ``strand`` is not ``"+"``, ``"-"`` or ``"."``,
+        or if ``score`` is NaN
+
+    Example:
+
+    >>> interval = Interval("chr1", 10, 20, strand="-", attrs={"gene_id": "g1"})
+    >>> interval.width
+    10
+    >>> interval.shift(5)
+    Interval('chr1', 5, 15, strand='-', name='', score=0.0, attrs={'gene_id': 'g1'})
     """
+
+    chrom: str
+    start: int
+    end: int
+    strand: _Strand
+    name: str
+    score: float
+    attrs: Mapping[str, Any] = field(hash=False)
 
     def __init__(
         self,
         chrom: str,
-        start: int,  # 0-based, inclusive
-        end: int,  # 0-based, exclusive
+        start: int,
+        end: int,
+        *,
+        strand: _Strand = ".",
         name: str = "",
         score: float = 0,
-        strand: str = ".",
-        attrs: Optional[dict] = None,
-    ):
-        self._chrom = chrom
-        self._start = start
-        self._end = end
-        self.name = name
-        self.score = score
-        self._strand = strand
-        self.attrs = attrs or dict()
-
-    # handle chr and stop
-    @property
-    def chrom(self):
-        return self._chrom
-
-    @property
-    def chr(self):
-        return self.chrom
-
-    @property
-    def start(self):
-        return self._start
-
-    @property
-    def end(self):
-        return self._end
-
-    @property
-    def stop(self):
-        return self.end
+        attrs: Mapping[str, Any] | None = None,
+    ) -> None:
+        for value, field_name in ((chrom, "chrom"), (strand, "strand"), (name, "name")):
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be a str, not {type(value).__name__}")
+        _check_int(start, "start")
+        _check_int(end, "end")
+        if not isinstance(score, numbers.Real) or isinstance(score, bool):
+            raise TypeError(f"score must be a number, not {type(score).__name__}")
+        if attrs is None:
+            attrs = {}
+        elif not isinstance(attrs, Mapping):
+            raise TypeError(f"attrs must be a mapping, not {type(attrs).__name__}")
+        if start > end:
+            raise ValueError(f"start must not be greater than end, got start={start}, end={end}")
+        if strand not in _STRANDS:
+            raise ValueError(f'strand must be "+", "-" or ".", got {strand!r}')
+        # a NaN score would make the interval unequal to itself
+        if math.isnan(score):
+            raise ValueError("score must not be NaN")
+        # the dataclass is frozen, so the fields are set with object.__setattr__
+        object.__setattr__(self, "chrom", chrom)
+        object.__setattr__(self, "start", int(start))
+        object.__setattr__(self, "end", int(end))
+        object.__setattr__(self, "strand", strand)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "score", float(score))
+        object.__setattr__(self, "attrs", _ReadOnlyDict(attrs))
 
     @property
-    def strand(self):
-        return self._strand
+    def width(self) -> int:
+        """Number of bases of the interval, ``end - start``."""
+        return self.end - self.start
 
     @property
-    def neg_strand(self):
+    def neg_strand(self) -> bool:
+        """True if the strand is ``"-"``."""
         return self.strand == "-"
 
-    def unstrand(self):
-        """Removes strand information."""
-        obj = self.copy()
-        obj._strand = "."
-        return obj
+    def unstrand(self) -> "Interval":
+        """Return the interval with the strand ``"."``."""
+        return replace(self, strand=".")
+
+    def swap_strand(self) -> "Interval":
+        """Return the interval with the strand ``"-"`` for ``"+"``, ``"+"`` for ``"-"``, and ``"."`` for ``"."``."""
+        if self.strand == ".":
+            return replace(self)
+        return replace(self, strand="+" if self.strand == "-" else "-")
 
     def center(self, use_strand=True):
         """Compute the center of the interval.
@@ -208,51 +282,34 @@ class Interval:
         :param x: shift amount
         :param use_strand:
         """
-        obj = self.copy()
         if use_strand and self.neg_strand:
             x = -x
-        obj._start = self.start + x
-        obj._end = self.end + x
-        return obj
+        return replace(self, start=self.start + x, end=self.end + x)
 
-    def swap_strand(self):
-        obj = self.copy()
-        if obj.strand == "+":
-            obj._strand = "-"
-        elif obj.strand == "-":
-            obj._strand = "+"
-        return obj
+    def __str__(self) -> str:
+        return f"{self.chrom}:{self.start}-{self.end}:{self.strand}"
 
-    def __eq__(self, obj):
-        try:
-            return (
-                self.chrom == obj.chrom
-                and self.start == obj.start
-                and self.end == obj.end
-                and self.strand == obj.strand
-            )
-        except AttributeError:
-            return NotImplemented
-
-    def __hash__(self):
-        return hash((self.chrom, self.start, self.end, self.strand))
-
-    def __str__(self):
-        return "{}:{}-{}:{}".format(self.chrom, self.start, self.end, self.strand)
-
-    def __repr__(self):
-        return "Interval(chrom='{}', start={}, end={}, name='{}', strand='{}', ...)".format(
-            self.chrom, self.start, self.end, self.name, self.strand
+    def __repr__(self) -> str:
+        return (
+            f"Interval({self.chrom!r}, {self.start}, {self.end}, strand={self.strand!r}, "
+            f"name={self.name!r}, score={self.score!r}, attrs={dict(self.attrs)!r})"
         )
 
     @classmethod
-    def from_str(cls, s):
-        chrom, int_range, strand = s.split(":")
-        start, end = int_range.split("-")
-        return cls(chrom=chrom, start=int(start), end=int(end), strand=strand)
+    def from_str(cls, s: str) -> "Interval":
+        """Parse an interval from its str, e.g. ``"chr1:10-20:-"``.
 
-    def copy(self):
-        return deepcopy(self)
+        :param s: the string ``"chrom:start-end:strand"``
+        :returns: the interval
+        :raises ValueError: if ``s`` has another format, or for the reasons of the constructor
+        """
+        # rsplit keeps the colons of chromosome names such as HLA-A*01:01:01:01
+        parts = s.rsplit(":", 2)
+        match = re.fullmatch(r"(-?\d+)-(-?\d+)", parts[1]) if len(parts) == 3 else None
+        if match is None:
+            raise ValueError(f's must have the format "chrom:start-end:strand", got {s!r}')
+        # the constructor checks the strand
+        return cls(parts[0], int(match[1]), int(match[2]), strand=cast(_Strand, parts[2]))
 
     def slop(self, upstream=0, downstream=0, use_strand=True):
         """Extend the interval upstream and downstream.
@@ -263,15 +320,13 @@ class Interval:
             on a "-" interval, ``upstream`` moves ``end`` and ``downstream`` moves ``start``.
             On "+" and "." intervals, and if False, ``upstream`` moves ``start`` and ``downstream`` moves ``end``.
         :returns: a new interval
+        :raises ValueError: if the new ``start`` is greater than the new ``end``
         """
         if use_strand and self.neg_strand:
             upstream, downstream = downstream, upstream
-        obj = self.copy()
-        obj._start -= upstream
-        obj._end += downstream
-        return obj
+        return replace(self, start=self.start - upstream, end=self.end + downstream)
 
-    def is_valid(self, chrom_len=math.inf):
+    def is_valid(self, chrom_len: float = math.inf) -> bool:
         """Check that the interval lies within [0, chrom_len).
 
         :param chrom_len: length of the chromosome. An interval may end at
@@ -279,16 +334,15 @@ class Interval:
         """
         return self.start >= 0 and self.end <= chrom_len
 
-    def truncate(self, chrom_len=math.inf):
+    def truncate(self, chrom_len: float = math.inf) -> "Interval":
         """Truncate the interval to become valid.
 
         :param chrom_len: length of the chromosome
         :returns: a new interval with ``start`` at least 0 and ``end`` at most ``chrom_len``
+        :raises ValueError: if ``end`` is negative, or if ``start`` is greater than ``chrom_len``
         """
-        obj = self.copy()
-        obj._start = max(self.start, 0)
-        obj._end = min(self.end, chrom_len)
-        return obj
+        # int turns a float chrom_len into an int, and min never returns the default math.inf
+        return replace(self, start=max(self.start, 0), end=int(min(self.end, chrom_len)))
 
     def resize(self, width, use_strand=True):
         """Resize the interval to ``width`` around its :meth:`center`.
@@ -296,32 +350,19 @@ class Interval:
         If ``width`` is odd, the result has one more base upstream of the center than downstream.
         Upstream is towards ``start`` on "+" and "." intervals, and towards ``end`` on "-" intervals.
 
-        :param width: width of the resized interval. If None, return a copy.
+        :param width: width of the resized interval. If None, return the interval.
         :param use_strand: if False, resize as an unstranded interval. The result keeps the strand.
         :returns: a new interval
         """
-        obj = deepcopy(self)
-
-        if width is None or self.width() == width:
-            # no need to resize
-            return obj
+        if width is None:
+            return self
 
         center = self.center(use_strand=use_strand)
         if self.neg_strand and use_strand:
             # negative strand
-            obj._start = center - width // 2
-            obj._end = center + width // 2 + width % 2
-        else:
-            # positive strand
-            obj._start = center - width // 2 - width % 2
-            obj._end = center + width // 2
-        return obj
-
-    def width(self):
-        return self.end - self.start
-
-    def __len__(self):
-        return self.width()
+            return replace(self, start=center - width // 2, end=center + width // 2 + width % 2)
+        # positive strand
+        return replace(self, start=center - width // 2 - width % 2, end=center + width // 2)
 
     def trim(self, i, j, use_strand=True):
         """Keep the bases ``i`` to ``j - 1`` of the interval.
@@ -332,15 +373,7 @@ class Interval:
             On "+" and "." intervals, and if False, count them from ``start``.
         :returns: a new interval
         """
-        obj = self.copy()
-        if i == 0 and j == self.width():
-            return obj
         assert j > i
         if self.strand == "-" and use_strand:
-            w = self.width()
-            obj._start = self.start + w - j
-            obj._end = self.start + w - i
-        else:
-            obj._start = self.start + i
-            obj._end = self.start + j
-        return obj
+            return replace(self, start=self.end - j, end=self.end - i)
+        return replace(self, start=self.start + i, end=self.start + j)

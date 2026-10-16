@@ -124,6 +124,18 @@ The matchers use polars instead of pyranges:
   `Encoder().one_hot(seq)` returns an array of shape `(len(seq), 4)`, `np.expand_dims(x, axis)` inserts an axis of length 1, and `np.swapaxes(x, axis1, axis2)` swaps two axes.
   For example, `ReorderedOneHot(alphabet_axis=0, dummy_axis=1)`, with the shape `(4, 1, len(seq))`, becomes `np.swapaxes(np.expand_dims(Encoder().one_hot(seq), 1), 0, 2)`.
   `ReorderedOneHot.get_output_shape` has no replacement.
+- `Interval` is immutable. Its fields cannot be reassigned, `attrs` is a read-only copy of the given mapping, and `copy()` is gone.
+  To change a field, use `dataclasses.replace`, e.g. `replace(interval, attrs={**interval.attrs, "gene_id": "g1"})`.
+- `Interval` takes `strand`, `name`, `score` and `attrs` only as keywords.
+  In 0.1, `Interval("chr1", 0, 10, "-")` set `name` to `"-"` and kept the strand `"."`.
+- `Interval` checks its fields. It raises a TypeError if `start` or `end` is not an int, e.g. `10.0`.
+  It raises a ValueError if `start` is greater than `end`, if `strand` is not `"+"`, `"-"` or `"."`, or if `score` is NaN.
+  Methods that would return such an interval raise the same ValueError, e.g. `slop` that removes more bases than the width, or `truncate` of an interval that starts after `chrom_len`.
+- `Interval.width` is a property: use `interval.width` instead of `interval.width()` and `len(interval)`.
+  The aliases `chr` and `stop` are gone: use `chrom` and `end`.
+- Two intervals are equal if all their fields are equal, including `name`, `score` and `attrs`. The hash leaves out `attrs`.
+  In 0.1, `==` compared only `chrom`, `start`, `end` and `strand`, also with other objects that have these attributes.
+  To compare the locations, compare `(i.chrom, i.start, i.end, i.strand)`.
 - `Interval.center(use_strand=False)` returns the center of the unstranded interval, so it rounds a center in the middle of a base up instead of down.
   On all strands, the result grows by 1 for intervals with an odd `start + end`.
   `Interval.center()` with the default `use_strand=True` is unchanged.
@@ -135,5 +147,3 @@ The matchers use polars instead of pyranges:
   `anchor="start"` and `anchor="end"` are unchanged: they keep the genomic `start` or `end` on all strands.
 - `Interval.slop(upstream, downstream)` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
   "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.
-- `Interval.trim` and `Interval.truncate` always return a new interval.
-  Before, they returned the input interval if nothing changed, so changing the `attrs` of the result changed the input.
