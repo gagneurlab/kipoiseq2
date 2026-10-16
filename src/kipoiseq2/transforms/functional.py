@@ -1,7 +1,9 @@
 import string
 from collections.abc import Mapping
+from types import MappingProxyType
 
-from kipoiseq2.dataclasses import _Anchor, _check_resize, _resize_bounds
+from kipoiseq2.dataclasses import _Anchor, _check_int, _check_resize, _resize_bounds
+from kipoiseq2.encoders import _unknown_letters_error
 
 # IUPAC complement, the same table as pyfaidx.complement. The other characters
 # below 256 are deleted, so a length change reveals them.
@@ -143,76 +145,87 @@ def fixed_len(seq: str, length: int, *, anchor: _Anchor = "center", value: str =
     return trim(seq, length, anchor=anchor)
 
 
-TRANSLATION_TABLE = {
-    "ATA": "I",
-    "ATC": "I",
-    "ATT": "I",
-    "ATG": "M",
-    "ACA": "T",
-    "ACC": "T",
-    "ACG": "T",
-    "ACT": "T",
-    "AAC": "N",
-    "AAT": "N",
-    "AAA": "K",
-    "AAG": "K",
-    "AGC": "S",
-    "AGT": "S",
-    "AGA": "R",
-    "AGG": "R",
-    "CTA": "L",
-    "CTC": "L",
-    "CTG": "L",
-    "CTT": "L",
-    "CCA": "P",
-    "CCC": "P",
-    "CCG": "P",
-    "CCT": "P",
-    "CAC": "H",
-    "CAT": "H",
-    "CAA": "Q",
-    "CAG": "Q",
-    "CGA": "R",
-    "CGC": "R",
-    "CGG": "R",
-    "CGT": "R",
-    "GTA": "V",
-    "GTC": "V",
-    "GTG": "V",
-    "GTT": "V",
-    "GCA": "A",
-    "GCC": "A",
-    "GCG": "A",
-    "GCT": "A",
-    "GAC": "D",
-    "GAT": "D",
-    "GAA": "E",
-    "GAG": "E",
-    "GGA": "G",
-    "GGC": "G",
-    "GGG": "G",
-    "GGT": "G",
-    "TCA": "S",
-    "TCC": "S",
-    "TCG": "S",
-    "TCT": "S",
-    "TTC": "F",
-    "TTT": "F",
-    "TTA": "L",
-    "TTG": "L",
-    "TAC": "Y",
-    "TAT": "Y",
-    "TAA": "_",
-    "TAG": "_",
-    "TGC": "C",
-    "TGT": "C",
-    "TGA": "_",
-    "TGG": "W",
-}
+TRANSLATION_TABLE = MappingProxyType(
+    {
+        "ATA": "I",
+        "ATC": "I",
+        "ATT": "I",
+        "ATG": "M",
+        "ACA": "T",
+        "ACC": "T",
+        "ACG": "T",
+        "ACT": "T",
+        "AAC": "N",
+        "AAT": "N",
+        "AAA": "K",
+        "AAG": "K",
+        "AGC": "S",
+        "AGT": "S",
+        "AGA": "R",
+        "AGG": "R",
+        "CTA": "L",
+        "CTC": "L",
+        "CTG": "L",
+        "CTT": "L",
+        "CCA": "P",
+        "CCC": "P",
+        "CCG": "P",
+        "CCT": "P",
+        "CAC": "H",
+        "CAT": "H",
+        "CAA": "Q",
+        "CAG": "Q",
+        "CGA": "R",
+        "CGC": "R",
+        "CGG": "R",
+        "CGT": "R",
+        "GTA": "V",
+        "GTC": "V",
+        "GTG": "V",
+        "GTT": "V",
+        "GCA": "A",
+        "GCC": "A",
+        "GCG": "A",
+        "GCT": "A",
+        "GAC": "D",
+        "GAT": "D",
+        "GAA": "E",
+        "GAG": "E",
+        "GGA": "G",
+        "GGC": "G",
+        "GGG": "G",
+        "GGT": "G",
+        "TCA": "S",
+        "TCC": "S",
+        "TCG": "S",
+        "TCT": "S",
+        "TTC": "F",
+        "TTT": "F",
+        "TTA": "L",
+        "TTG": "L",
+        "TAC": "Y",
+        "TAT": "Y",
+        "TAA": "_",
+        "TAG": "_",
+        "TGC": "C",
+        "TGT": "C",
+        "TGA": "_",
+        "TGG": "W",
+    }
+)
+"""Map from each DNA codon in upper case to its one-letter amino acid in the standard genetic code, NCBI genetic code 1.
+
+Stop codons map to ``_``. The map is read-only.
+:func:`translate` uses it for ``transl_table`` 1 and 11.
+
+:meta hide-value:
+"""
 
 
 # NCBI genetic code 2, the vertebrate mitochondrial code
-_VERTEBRATE_MITOCHONDRIAL_TABLE = {**TRANSLATION_TABLE, "AGA": "_", "AGG": "_", "ATA": "M", "TGA": "W"}
+_VERTEBRATE_MITOCHONDRIAL_TABLE = MappingProxyType(
+    {**TRANSLATION_TABLE, "AGA": "_", "AGG": "_", "ATA": "M", "TGA": "W"}
+)
 
 # NCBI genetic code id -> codon table. Table 11 differs from table 1 only in its start codons.
 _GENETIC_CODES = {1: TRANSLATION_TABLE, 2: _VERTEBRATE_MITOCHONDRIAL_TABLE, 11: TRANSLATION_TABLE}
@@ -220,9 +233,10 @@ _GENETIC_CODES = {1: TRANSLATION_TABLE, 2: _VERTEBRATE_MITOCHONDRIAL_TABLE, 11: 
 _TRANSL_EXCEPT_SYMBOLS = frozenset(string.ascii_uppercase + "_")
 
 
-def translate(seq: str, transl_table: int = 1, transl_except: Mapping[int, str] | None = None) -> str:
+def translate(seq: str, *, transl_table: int = 1, transl_except: Mapping[int, str] | None = None) -> str:
     """Translate a DNA sequence into amino acids with an NCBI genetic code and annotated translation exceptions.
 
+    The lookup of the codons is case-sensitive, as in the encoders, so a lowercase codon raises a ValueError.
     Stop codons become ``_``, and translation continues after them.
 
     kipoiseq2 has no CDS model, so for the sequence of a variant the caller moves the exceptions.
@@ -231,40 +245,65 @@ def translate(seq: str, transl_table: int = 1, transl_except: Mapping[int, str] 
     Downstream of a frameshift, drop the exceptions.
     Then a new TGA elsewhere translates as a stop.
 
-    :param seq: DNA sequence in upper case, with a length that is a multiple of 3.
+    :param seq: uppercase DNA sequence with a length that is a multiple of 3.
         A partial last codon is allowed if ``transl_except`` covers it,
         e.g. a mitochondrial stop that poly(A) completes.
     :param transl_table: NCBI genetic code id, as in cdot ``translation.transl_table`` and in GFF.
-        1 and 11 use ``TRANSLATION_TABLE``.
+        1 and 11 use :data:`TRANSLATION_TABLE`.
         Table 11 differs from table 1 only in its start codons, so pass a non-AUG start as ``{1: "M"}``.
         2 uses the vertebrate mitochondrial code, where AGA and AGG are stops, ATA is M and TGA is W.
     :param transl_except: map from a 1-based codon number to a one-letter amino acid,
         as in cdot ``transl_except`` and HGVS p.,
         e.g. ``{8: "U"}`` for selenocysteine, ``{1: "M"}`` for a non-AUG start or ``{n: "_"}`` for a stop.
-        The exception sets the amino acid of its codon, so that codon is not looked up in the table.
+        The exception sets the amino acid of its codon, so that codon is not looked up in the genetic code.
     :returns: Amino acid sequence with one letter per codon
+    :raises TypeError: if ``seq`` is not a str, if ``transl_table`` is not an int,
+        if ``transl_except`` is not a mapping,
+        or if it contains a position that is not an int or an amino acid that is not a str
     :raises ValueError: if ``transl_table`` is not 1, 2 or 11,
-        if a position in ``transl_except`` is not an int from 1 to the number of codons,
+        if a position in ``transl_except`` is not from 1 to the number of codons,
         if an amino acid in ``transl_except`` is not an upper-case ASCII letter or ``_``,
-        or if the length of ``seq`` is not a multiple of 3 and ``transl_except`` does not cover the partial last codon
-    :raises KeyError: if a codon without an exception is not in the table, e.g. because it contains N
+        if the length of ``seq`` is not a multiple of 3 and ``transl_except`` does not cover the partial last codon,
+        or if a codon without an exception is not in the genetic code, e.g. because it contains N or a lowercase letter
+
+    Example:
+
+    >>> translate("ATGTGGTAA")
+    'MW_'
+    >>> # selenocysteine at codon 2
+    >>> translate("ATGTGATAA", transl_except={2: "U"})
+    'MU_'
     """
+    if not isinstance(seq, str):
+        raise TypeError(f"seq must be a str, not {type(seq).__name__}")
+    _check_int(transl_table, "transl_table")
     if transl_table not in _GENETIC_CODES:
         raise ValueError(f"transl_table must be one of {sorted(_GENETIC_CODES)}, got {transl_table!r}")
     table = _GENETIC_CODES[transl_table]
 
-    transl_except = transl_except or {}
+    if transl_except is None:
+        transl_except = {}
+    elif not isinstance(transl_except, Mapping):
+        raise TypeError(f"transl_except must be a mapping or None, not {type(transl_except).__name__}")
     n_codons = (len(seq) + 2) // 3
     for position, amino_acid in transl_except.items():
-        if not isinstance(position, int) or not 1 <= position <= n_codons:
-            raise ValueError(f"transl_except position must be an int from 1 to {n_codons}, got {position!r}")
-        if not isinstance(amino_acid, str) or amino_acid not in _TRANSL_EXCEPT_SYMBOLS:
+        _check_int(position, "transl_except position")
+        if not 1 <= position <= n_codons:
+            raise ValueError(f"transl_except position must be from 1 to {n_codons}, got {position!r}")
+        if not isinstance(amino_acid, str):
+            raise TypeError(f"transl_except amino acid must be a str, not {type(amino_acid).__name__}")
+        if amino_acid not in _TRANSL_EXCEPT_SYMBOLS:
             raise ValueError(f"transl_except amino acid must be one upper-case ASCII letter or '_', got {amino_acid!r}")
 
     if len(seq) % 3 != 0 and n_codons not in transl_except:
         raise ValueError(f"len(seq) % 3 != 0 and transl_except does not cover the partial last codon {n_codons}")
 
-    codons = (seq[i : i + 3] for i in range(0, len(seq), 3))
+    codons = [seq[i : i + 3] for i in range(0, len(seq), 3)]
+    unknown = {
+        codon for number, codon in enumerate(codons, start=1) if number not in transl_except and codon not in table
+    }
+    if unknown:
+        raise _unknown_letters_error(unknown, table, "codons", f"genetic code {transl_table}")
     return "".join(
         transl_except[number] if number in transl_except else table[codon]
         for number, codon in enumerate(codons, start=1)

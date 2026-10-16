@@ -273,3 +273,9 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - A null strand in `intervals` gives the strand `"."` in the pairs, as a missing strand column.
 - With `scan_vcf_variants(path)` as `variants`, the pairs keep all its columns, e.g. `variant_qual` and `variant_filter`.
   `vcf_file` kept only the coordinates, `variant_ref`, `variant_alt` and `variant_allele_idx`.
+- `translate` takes `transl_table` and `transl_except` only as keyword arguments: `translate(seq, 2)` becomes `translate(seq, transl_table=2)`.
+- `translate` raises a ValueError that names the codons that are not in the genetic code, e.g. `ATN`, instead of a KeyError.
+  The lookup stays case-sensitive, so a lowercase codon such as `atg` raises this ValueError too, and the message hints at `seq.upper()`.
+  It raises a TypeError instead of a ValueError if a position in `transl_except` is not an int or an amino acid is not a str.
+- `TRANSLATION_TABLE` is read-only. In 0.1, it was a dict, and changing it changed the result of `translate` with `transl_table` 1 and 11.
+  For a table that you can change, use `dict(TRANSLATION_TABLE)`.
