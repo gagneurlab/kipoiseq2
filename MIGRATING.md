@@ -13,6 +13,9 @@ kipoiseq2 also drops these parts of kipoiseq:
 kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra is gone and the `ranges` extra covers VCF reading:
 - `MultiSampleVCF` becomes `scan_vcf_variants`, with one row per ALT allele, or `scan_vcf_genotypes`, with one row per ALT allele and sample.
   Both return a polars LazyFrame instead of Variant objects.
+  Both keep only the ALT alleles that are sequences of the bases A, C, G, T and N, in any case.
+  Unlike `MultiSampleVCF`, they keep the ALT alleles that contain N, and they drop symbolic ALT alleles such as `<DEL>`.
+  They also drop a missing ALT (`.`), which `MultiSampleVCF` gave as an empty alt.
 - `query_all().filter(lambda ...)` and `FilterVariantQuery` become a polars filter on `scan_vcf_variants(path)`.
   For example, `filter(lambda v: v.qual > 10)` becomes `.filter(pl.col("qual") > 10)`, and `FilterVariantQuery()` becomes `.filter(pl.col("filter") == "PASS")`.
   polars-bio gives a missing QUAL (`.`) as null and a missing FILTER (`.`) as an empty string.

@@ -6,6 +6,8 @@ from kipoiseq2.extractors.vcf import scan_vcf_genotypes, scan_vcf_variants
 
 # The output of kipoiseq's MultiSampleVCF, which read VCF files with cyvcf2:
 # chrom, start, end, pos, ref and alt of the Variants it yielded.
+# scan_vcf_variants keeps other ALT alleles than MultiSampleVCF, and these lists follow it:
+# they add the ALT alleles that contain N, and they drop symbolic ALT alleles and ALT `.`.
 CYVCF2_VARIANTS = {
     vcf_file: [
         ("chr1", 3, 4, 4, "T", "C"),
@@ -17,17 +19,16 @@ CYVCF2_VARIANTS = {
         ("chr1", 3, 4, 4, "T", "A"),
         ("chr1", 3, 4, 4, "T", "G"),
         ("chr1", 4, 5, 5, "A", "GA"),
-        ("chr1", 4, 5, 5, "A", ""),
-        ("chr1", 11, 12, 12, "T", ""),
+        ("chr1", 4, 5, 5, "A", "N"),
         ("chr1", 24, 28, 25, "AACG", "GA"),
     ],
     "edge_case_vcf": [
         ("chr1", 9, 10, 10, "A", "C"),
         ("chr1", 9, 10, 10, "A", "G"),
-        ("chr1", 19, 23, 20, "ACGT", "<DEL>"),
-        ("chr1", 29, 30, 30, "T", ""),
+        ("chr1", 39, 40, 40, "G", "N"),
         ("chr2", 4, 6, 5, "TA", "T"),
         ("chr2", 4, 6, 5, "TA", "TAA"),
+        ("chr2", 4, 6, 5, "TA", "N"),
     ],
 }
 
@@ -55,22 +56,35 @@ def test_scan_vcf_variants_equals_cyvcf2(path):
 def test_scan_vcf_variants_edge_cases(edge_case_vcf):
     df = scan_vcf_variants(edge_case_vcf).collect()
     assert df.select("chrom", "start", "end", "pos", "ref", "alt").rows() == CYVCF2_VARIANTS["edge_case_vcf"]
-    # one row per ALT allele, without the ALT alleles that contain N or *
+    # one row per ALT allele that is a sequence of bases
     assert df.select("pos", "alt", "allele_idx").rows() == [
         (10, "C", 1),
         (10, "G", 2),
-        (20, "<DEL>", 1),
-        (30, "", 1),
+        (40, "N", 1),
         (5, "T", 1),
         (5, "TAA", 2),
+        (5, "N", 3),
     ]
-    # end follows REF, not INFO/END=40
-    assert df.filter(pl.col("alt") == "<DEL>").select("start", "end").row(0) == (19, 23)
     # a missing ID or FILTER is an empty string, and a missing QUAL is null
-    assert df.filter(pl.col("alt").is_in(["G", "<DEL>"])).select("id", "qual", "filter").rows() == [
+    assert df.filter(pl.col("alt").is_in(["G", "TAA"])).select("id", "qual", "filter").rows() == [
         ("rs1", 50.0, "PASS"),
         ("", None, ""),
     ]
+
+
+def test_scan_vcf_variants_alt_kinds(alt_kinds_vcf):
+    df = scan_vcf_variants(alt_kinds_vcf).collect()
+    # ALT ".", "*", symbolic ALT alleles and the breakend are dropped, and alt keeps its case.
+    # allele_idx counts the dropped <DEL>.
+    assert df.select("pos", "ref", "alt", "allele_idx").rows() == [
+        (2, "C", "A", 1),
+        (4, "T", "acg", 1),
+        (6, "A", "AN", 1),
+        (23, "G", "A", 1),
+        (23, "G", "C", 3),
+    ]
+    # end follows REF, not INFO/END=25
+    assert df.filter(pl.col("pos") == 23).select("start", "end").rows() == [(22, 23), (22, 23)]
 
 
 def test_scan_vcf_variants_columns():
@@ -118,13 +132,13 @@ def test_scan_vcf_genotypes_per_allele(edge_case_vcf):
         (10, "C", "S2", "1|1"),
         # 0/2 carries the second ALT allele only
         (10, "G", "S1", "0/2"),
-        (20, "<DEL>", "S1", "0/1"),
-        (20, "<DEL>", "S2", "1/2"),
+        (40, "N", "S1", "0/1"),
         # haploid
         (5, "T", "S1", "1"),
         # the missing allele is ignored
         (5, "T", "S3", ".|1"),
         (5, "TAA", "S2", "3/2"),
+        (5, "N", "S2", "3/2"),
     ]
     assert df["carrier"].all()
 
@@ -159,7 +173,19 @@ def test_scan_vcf_genotypes_all_rows(edge_case_vcf):
         ("G", "S3", "./.", None, None, False),
     ]
     # a missing GT is not a carrier
-    assert df.filter((pl.col("pos") == 30) & (pl.col("sample") == "S3")).select("GT", "carrier").row(0) == (None, False)
+    assert df.filter((pl.col("pos") == 40) & (pl.col("sample") == "S3")).select("GT", "carrier").row(0) == (None, False)
+
+
+def test_scan_vcf_genotypes_alt_kinds(alt_kinds_vcf):
+    df = scan_vcf_genotypes(alt_kinds_vcf).collect()
+    # for the ALT alleles A,<DEL>,C, S1 with GT 2/3 carries C, and S2 with GT 0/1 carries A
+    assert df.select("pos", "alt", "allele_idx", "sample", "GT").rows() == [
+        (2, "A", 1, "S1", "0/1"),
+        (4, "acg", 1, "S1", "0/1"),
+        (6, "AN", 1, "S1", "0/1"),
+        (23, "A", 1, "S2", "0/1"),
+        (23, "C", 3, "S1", "2/3"),
+    ]
 
 
 def test_scan_vcf_genotypes_samples(edge_case_vcf, tmp_path):
