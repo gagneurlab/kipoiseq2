@@ -1,8 +1,9 @@
+import polars as pl
 import pytest
 from conftest import sample_5kb_fasta_file
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors import FastaStringExtractor, SingleVariantMatcher
+from kipoiseq2.extractors import FastaStringExtractor, scan_variant_pairs, scan_vcf_variants
 from kipoiseq2.extractors.vcf_seq import VariantSeqExtractor
 
 fasta_file = sample_5kb_fasta_file
@@ -158,7 +159,11 @@ def test_extract(variant_seq_extractor):
 def test_extract_vcf_variants(variant_seq_extractor, alt_kinds_vcf):
     # the interval covers the records of ALT_KINDS_VCF up to the breakend
     interval = Interval("chr1", 0, 21)
-    variants = [variant for _, variant in SingleVariantMatcher(alt_kinds_vcf, intervals=[interval])]
+    pairs = scan_variant_pairs(pl.DataFrame([interval]), scan_vcf_variants(alt_kinds_vcf)).collect()
+    variants = [
+        Variant(r["chrom"], r["variant_pos"], r["variant_ref"], r["variant_alt"])
+        for r in pairs.sort("variant_idx").iter_rows(named=True)
+    ]
     seq = variant_seq_extractor.extract(interval, variants)
     # the reference ACGTAACGTAACGTAACGTAA with C>A at 2, T>ACG at 4 and A>AN at 6.
     # The ALT ".", "*", symbolic ALT alleles and the breakend change nothing.
