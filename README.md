@@ -100,6 +100,9 @@ rows[Tokenizer().tokenize("ACGTNR")]  # float32 array of shape (6, 5)
 
 `scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame, with one row per ALT allele.
 Its coordinates follow `Variant`: `start` is `pos - 1` and `end` is `start + len(ref)`.
+It keeps only the ALT alleles that are sequences of the bases A, C, G, T and N.
+`sequence_alts_only=False` keeps the other ALT alleles too, e.g. `*` and symbolic ALT alleles such as `<DEL>`.
+Use it only for tables, because `VariantSeqExtractor` inserts symbolic ALT alleles as text.
 
 ```python
 import polars as pl

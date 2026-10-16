@@ -350,6 +350,7 @@ CYVCF2_INTERVALS = [
 
 # The overlapping pairs of CYVCF2_INTERVALS and the Variants of the cyvcf2-based MultiSampleVCF,
 # in VCF order and per variant in the order of the intervals: the index into CYVCF2_INTERVALS and the variant.
+# As in CYVCF2_VARIANTS of test_vcf.py, the ALT alleles follow scan_vcf_variants instead of MultiSampleVCF.
 CYVCF2_PAIRS = {
     vcf_file: [
         (0, "chr1:4:T>C"),
@@ -362,9 +363,7 @@ CYVCF2_PAIRS = {
         (0, "chr1:4:T>A"),
         (0, "chr1:4:T>G"),
         (0, "chr1:5:A>GA"),
-        (0, "chr1:5:A>"),
-        (0, "chr1:12:T>"),
-        (1, "chr1:12:T>"),
+        (0, "chr1:5:A>N"),
         (1, "chr1:25:AACG>GA"),
         (2, "chr1:25:AACG>GA"),
     ],
@@ -373,11 +372,10 @@ CYVCF2_PAIRS = {
         (1, "chr1:10:A>C"),
         (0, "chr1:10:A>G"),
         (1, "chr1:10:A>G"),
-        (1, "chr1:20:ACGT><DEL>"),
-        (1, "chr1:30:T>"),
-        (2, "chr1:30:T>"),
+        (2, "chr1:40:G>N"),
         (3, "chr2:5:TA>T"),
         (3, "chr2:5:TA>TAA"),
+        (3, "chr2:5:TA>N"),
     ],
 }
 
