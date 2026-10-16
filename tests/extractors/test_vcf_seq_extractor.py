@@ -206,3 +206,38 @@ def test_extract_interval_before_chromosome_start(variant_seq_extractor):
 def test_extract_unknown_chrom(variant_seq_extractor):
     with pytest.raises(ValueError, match="^chrom 'chr2' is not in the reference$"):
         variant_seq_extractor.extract(Interval("chr2", 0, 10), [], anchor=0)
+
+
+def test_extract_rejects_wrong_types(variant_seq_extractor):
+    with pytest.raises(TypeError, match="^interval must be an Interval, not str$"):
+        variant_seq_extractor.extract("chr1:0-10:+", [], anchor=0)
+    with pytest.raises(TypeError, match="^variants must be Variants, not str$"):
+        variant_seq_extractor.extract(Interval("chr1", 0, 10), ["chr1:2:C>T"], anchor=0)
+
+
+def test_extract_variant_on_other_chrom(variant_seq_extractor):
+    with pytest.raises(ValueError, match="^variant chr2:2:C>T lies on another chromosome than the interval chr1:0-10"):
+        variant_seq_extractor.extract(Interval("chr1", 0, 10), [Variant("chr2", 2, "C", "T")], anchor=0)
+
+
+def test_extract_variant_outside_chromosome(variant_seq_extractor):
+    variant = Variant("chr1", CHROM_LEN, "AC", "A")
+    with pytest.raises(ValueError, match="^variant chr1:5000:AC>A lies outside chr1, which has 5000 bases$"):
+        variant_seq_extractor.extract(Interval("chr1", CHROM_LEN - 10, CHROM_LEN), [variant], anchor=CHROM_LEN)
+
+
+def test_extract_ref_differs(variant_seq_extractor):
+    # the reference has a G at position 3
+    with pytest.raises(ValueError, match="^the REF of variant chr1:3:A>T differs from the reference 'G'$"):
+        variant_seq_extractor.extract(Interval("chr1", 0, 10), [Variant("chr1", 3, "A", "T")], anchor=0)
+    # the REF of a variant outside the interval is checked too
+    with pytest.raises(ValueError, match="differs from the reference 'GT'"):
+        variant_seq_extractor.extract(Interval("chr1", 20, 30), [Variant("chr1", 13, "TA", "T")], anchor=20)
+
+
+@pytest.mark.parametrize("ref", ["C", "c"])
+def test_extract_ref_ignores_case(ref):
+    # sample.fasta has the sequence ACGTacgt, so with uppercase=False the reference has a lowercase c at position 6
+    with FastaStringExtractor("tests/data/sample.fasta", use_strand=False, uppercase=False) as fasta:
+        extractor = VariantSeqExtractor(fasta, use_strand=True)
+        assert extractor.extract(Interval("chr1", 0, 8), [Variant("chr1", 6, ref, "T")], anchor=0) == "ACGTaTgt"

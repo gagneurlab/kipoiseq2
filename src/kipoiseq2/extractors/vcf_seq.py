@@ -97,9 +97,24 @@ class VariantSeqExtractor:
             ends after the end of the chromosome, or because a deletion pulls in bases from beyond it.
             The length of the chromosome comes from ``reference.chrom_sizes``.
         :returns: A single sequence (``str``) with all the variants applied.
+        :raises TypeError: if ``interval`` is not an Interval, or if a variant is not a Variant
         :raises ValueError: if ``interval.chrom`` is not in ``reference.chrom_sizes``,
+            if a variant lies on another chromosome than ``interval`` or outside the chromosome,
+            if the REF of a variant differs from the reference, ignoring case,
             or if the sequence needs bases outside the chromosome and ``is_padding`` is False
         """
+        if not isinstance(interval, Interval):
+            raise TypeError(f"interval must be an Interval, not {type(interval).__name__}")
+        chrom_size = _chrom_size(self._reference.chrom_sizes, interval.chrom)
+        variants = list(variants)
+        for v in variants:
+            if not isinstance(v, Variant):
+                raise TypeError(f"variants must be Variants, not {type(v).__name__}")
+            if v.chrom != interval.chrom:
+                raise ValueError(f"variant {v} lies on another chromosome than the interval {interval}")
+            if v.start < 0 or v.end > chrom_size:
+                raise ValueError(f"variant {v} lies outside {v.chrom}, which has {chrom_size} bases")
+
         anchor = max(min(anchor, interval.end), interval.start)
         edits = self._split([(v.start, v.end, v.alt) for v in variants], anchor)
         if not fixed_len:
@@ -138,10 +153,17 @@ class VariantSeqExtractor:
             prev = end
         right_pieces.append((prev, iend))
 
-        chrom_size = _chrom_size(self._reference.chrom_sizes, interval.chrom)
-        ref_seq = self._fetch(interval.chrom, istart, iend, chrom_size)
-        down_str = self._join(left_pieces, ref_seq, istart)
-        up_str = self._join(right_pieces, ref_seq, istart)
+        # one fetch covers the pieces and the REF of each variant
+        fetch_start = min([istart, *(v.start for v in variants)])
+        fetch_end = max([iend, *(v.end for v in variants)])
+        ref_seq = self._fetch(interval.chrom, fetch_start, fetch_end, chrom_size)
+        for v in variants:
+            ref = ref_seq[v.start - fetch_start : v.end - fetch_start]
+            # a reference read with uppercase=False keeps soft-masked bases in lowercase
+            if ref.upper() != v.ref.upper():
+                raise ValueError(f"the REF of variant {v} differs from the reference {ref!r}")
+        down_str = self._join(left_pieces, ref_seq, fetch_start)
+        up_str = self._join(right_pieces, ref_seq, fetch_start)
 
         if fixed_len:
             # the deletions pulled in enough bases, so both parts are long enough.

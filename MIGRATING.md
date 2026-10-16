@@ -203,3 +203,6 @@ The matchers use polars instead of pyranges:
 - `VariantSeqExtractor.extract` no longer takes `chrom_len`. It reads the length of the chromosome from `reference.chrom_sizes`.
   If the sequence needs bases before 0 or after the end of the chromosome, it fills them with N for `is_padding=True` and raises a ValueError otherwise.
   In 0.1, without `chrom_len`, the reference returned fewer bases at the chromosome end. For an anchor outside the chromosome, the N were at the wrong end.
+- `VariantSeqExtractor.extract` checks the variants. It raises a ValueError for a variant on another chromosome than `interval`, for a variant outside the chromosome, and for a variant whose REF differs from the reference, ignoring case.
+  In 0.1, it replaced the reference bases at the position of such a variant with its ALT.
+  It raises a TypeError if `interval` is not an `Interval` or a variant is not a `Variant`.
