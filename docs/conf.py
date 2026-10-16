@@ -7,8 +7,8 @@ import re
 from importlib.metadata import version as _version
 
 project = "kipoiseq2"
-author = "Kipoi team"
-copyright = "2018, Kipoi team"
+author = "Florian Hölzlwimmer"
+copyright = "2018 Kipoi team, 2026 Florian Hölzlwimmer"
 release = _version("kipoiseq2")
 version = release
 
