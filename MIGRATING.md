@@ -213,3 +213,12 @@ The matchers use polars instead of pyranges:
   In 0.1, it moved an anchor outside the interval to the nearest end of the interval.
 - `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` no longer take `use_strand`.
   Create the extractor with the `use_strand` you need instead.
+- `rc_dna(seq)` becomes `reverse_complement(seq)` from `kipoiseq2.transforms.functional`.
+  `reverse_complement` also takes the IUPAC codes, e.g. N, and raises ValueError instead of KeyError for other characters.
+- `rc_rna(seq)` is gone. For an RNA sequence in upper case, use `reverse_complement(seq.replace("U", "T")).replace("T", "U")`.
+- `kipoiseq2.utils.parse_dtype` is gone, because it called `eval()` on strings, and only `ReorderedOneHot` used it.
+  For a dtype name, use `np.dtype(name)`, e.g. `np.dtype("float32")`.
+- `SplitSplicingSeq` is gone, because only the MMSplice dataloader used it. Keep using `kipoiseq` for it.
+- `kipoiseq2.utils.to_scalar` and `batch_iter` are gone:
+  - `to_scalar(x)` becomes `x.item()` for a numpy scalar.
+  - `batch_iter(items, n)` becomes `itertools.batched(items, n)`, which yields tuples instead of lists.

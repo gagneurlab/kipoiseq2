@@ -44,6 +44,16 @@ def test_fasta_extractor_uppercases_by_default(tmp_path):
         FastaStringExtractor(fasta_file, True, False)
 
 
+def test_fasta_extractor_rejects_letters_without_complement(tmp_path):
+    # the reverse complement of a "-" interval fails for a letter without IUPAC complement, e.g. U
+    fasta_file = tmp_path / "rna.fa"
+    fasta_file.write_text(">chr1\nACGU\n")
+    with FastaStringExtractor(fasta_file, use_strand=True) as fasta:
+        assert fasta.extract(Interval("chr1", 0, 4, strand="+")) == "ACGU"
+        with pytest.raises(ValueError, match=r"^Sequence contains non-DNA characters: \['U'\]$"):
+            fasta.extract(Interval("chr1", 0, 4, strand="-"))
+
+
 def test_fasta_extractor_is_a_sequence_extractor():
     with FastaStringExtractor("tests/data/sample.fasta", use_strand=False) as fasta:
         assert isinstance(fasta, SequenceExtractor)
