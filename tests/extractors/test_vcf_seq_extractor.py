@@ -2,7 +2,7 @@ import pytest
 from conftest import sample_5kb_fasta_file
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors import FastaStringExtractor
+from kipoiseq2.extractors import FastaStringExtractor, SingleVariantMatcher
 from kipoiseq2.extractors.vcf_seq import (
     IntervalSeqBuilder,
     Subsequence,
@@ -178,6 +178,16 @@ def test_extract(variant_seq_extractor):
         interval, variants, anchor=10, fixed_len=False
     )
     assert seq == "ACG"
+
+
+def test_extract_vcf_variants(variant_seq_extractor, alt_kinds_vcf):
+    # the interval covers the records of ALT_KINDS_VCF up to the breakend
+    interval = Interval("chr1", 0, 21)
+    variants = [variant for _, variant in SingleVariantMatcher(alt_kinds_vcf, intervals=[interval])]
+    seq = variant_seq_extractor.extract(interval, variants, anchor=0, fixed_len=False)
+    # the reference ACGTAACGTAACGTAACGTAA with C>A at 2, T>acg at 4 and A>AN at 6.
+    # The ALT ".", "*", symbolic ALT alleles and the breakend change nothing.
+    assert seq == "AAGacgAANCGTAACGTAACGTAA"
 
 
 @pytest.mark.parametrize("anchor", [15, 20, 25])

@@ -21,14 +21,20 @@ __all__ = ["scan_vcf_variants", "scan_vcf_genotypes"]
 # the columns of polars_bio.scan_vcf without INFO and FORMAT fields
 _SCAN_VCF_COLUMNS = ("chrom", "start", "end", "id", "ref", "alt", "qual", "filter")
 
+_SEQUENCE_ALT = "(?i)^[ACGTN]+$"
+"""Regex of the ALT alleles that are sequences of bases: A, C, G, T and N, in any case."""
+
 
 def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
     """Read the variants of a VCF file as a polars LazyFrame, with one row per ALT allele.
 
     The file is read lazily with ``polars_bio.scan_vcf``. A record with
-    several ALT alleles gives one row per ALT allele. ALT alleles that
-    contain ``N`` or ``*`` are dropped, as in kipoiseq's ``MultiSampleVCF``. An
-    ALT of ``.`` gives an empty alt.
+    several ALT alleles gives one row per ALT allele, but only for the ALT
+    alleles that are sequences of bases. The VCF specification defines the
+    bases as A, C, G, T and N, in any case. So these ALT alleles give no
+    row: a missing ALT (``.``), the ``*`` allele, symbolic ALT alleles such
+    as ``<DEL>``, and breakends. alt keeps the case of the VCF file, and
+    allele_idx counts the dropped ALT alleles too.
 
     :param path: path of the VCF file.
     :param ``**scan_vcf_kwargs``: keyword arguments of ``polars_bio.scan_vcf``, e.g.
@@ -59,7 +65,7 @@ def scan_vcf_variants(path: str, **scan_vcf_kwargs) -> pl.LazyFrame:
             allele_idx=pl.int_ranges(1, alts.list.len() + 1),
         )
         .explode("alt", "allele_idx", empty_as_null=False)
-        .filter(~pl.col("alt").str.contains("[N*]"))
+        .filter(pl.col("alt").str.contains(_SEQUENCE_ALT))
         .with_columns(start=start, end=start + pl.col("ref").str.len_chars())
         .select("chrom", "start", "end", "pos", "id", "ref", "alt", "allele_idx", "qual", "filter", *fields)
     )
@@ -81,6 +87,9 @@ def scan_vcf_genotypes(
     row. GT may be haploid or phased, and missing alleles (``.``) are ignored.
     So a sample with GT 0/2 carries the second ALT allele but not the first
     one, and a sample with GT ./1 carries the first ALT allele.
+    The rows cover the same ALT alleles as :func:`scan_vcf_variants`. For
+    the ALT alleles ``A,<DEL>,C``, a sample with GT 0/3 carries C, and a
+    sample with GT 0/2 carries none of the kept ALT alleles.
 
     :param path: path of the VCF file.
     :param samples: names of the samples to read. The default reads all samples.
