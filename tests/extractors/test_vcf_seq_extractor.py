@@ -3,72 +3,11 @@ from conftest import sample_5kb_fasta_file
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors import FastaStringExtractor
-from kipoiseq2.extractors.vcf_seq import (
-    IntervalSeqBuilder,
-    Subsequence,
-    VariantSeqExtractor,
-    reverse_complement,
-)
+from kipoiseq2.extractors.vcf_seq import VariantSeqExtractor, reverse_complement
 
 fasta_file = sample_5kb_fasta_file
 
 intervals = [Interval("chr1", 4, 10), Interval("chr1", 5, 30), Interval("chr1", 20, 30)]
-
-
-@pytest.fixture
-def interval_seq_builder():
-    return IntervalSeqBuilder(
-        [
-            (10, 13),
-            (13, 14),
-            Subsequence(seq="TAGC", start=14, end=18),
-            (18, 20),
-        ]
-    )
-
-
-def test_interval_seq_builder_restore(interval_seq_builder):
-    sequence = Subsequence(seq="CCCCATCGTT", start=10, end=20)
-    interval_seq_builder.restore(sequence)
-    assert interval_seq_builder[0].seq == "CCC"
-    assert interval_seq_builder[1].seq == "C"
-    assert interval_seq_builder[2].seq == "TAGC"
-    assert interval_seq_builder[3].seq == "TT"
-
-    interval_seq_builder.append((5, 10))
-    interval_seq_builder.restore(sequence)
-    assert interval_seq_builder[4].seq == ""
-
-    interval_seq_builder.append((20, 25))
-    interval_seq_builder.restore(sequence)
-    assert interval_seq_builder[5].seq == ""
-
-    interval_seq_builder.append((10, 5))
-    interval_seq_builder.restore(sequence)
-    assert interval_seq_builder[6].seq == ""
-
-    interval_seq_builder.append((25, 20))
-    interval_seq_builder.restore(sequence)
-    assert interval_seq_builder[7].seq == ""
-
-
-def test_interval_seq_builder_concat(interval_seq_builder):
-    with pytest.raises(TypeError):
-        interval_seq_builder.concat()
-
-    sequence = Subsequence(seq="CCCCATCGNN", start=10, end=20)
-    interval_seq_builder.restore(sequence)
-    assert interval_seq_builder.concat() == "CCCCTAGCNN"
-
-
-def test_subsequence_slice_keeps_coordinates():
-    s = Subsequence(seq="ACGTA", start=10, end=15)
-    assert s[1:3] == Subsequence("CG", 11, 13)
-    assert s[:2] == Subsequence("AC", 10, 12)
-    assert s[3:] == Subsequence("TA", 13, 15)
-    # slices beyond the sequence are clamped, as for str
-    assert s[4:9] == Subsequence("A", 14, 15)
-    assert s[7:9] == Subsequence("", 15, 15)
 
 
 def test_reverse_complement():
@@ -104,22 +43,15 @@ def test_variant_seq_extractor_extract_rejects_unknown_arguments(variant_seq_ext
         variant_seq_extractor.extract(Interval("chr1", 0, 3), [], anchor=0, fixed_length=False)
 
 
-def test__split_overlapping(variant_seq_extractor):
-    pair = (Subsequence(seq="AAA", start=3, end=6), Subsequence(seq="T", start=3, end=4))
-    splited_pairs = list(variant_seq_extractor._split_overlapping([pair], 5))
-
-    assert splited_pairs[0][0].seq == "AA"
-    assert splited_pairs[0][1].seq == "T"
-    assert splited_pairs[1][0].seq == "A"
-    assert splited_pairs[1][1].seq == ""
-
-    pair = (Subsequence(seq="TT", start=3, end=5), Subsequence(seq="AAA", start=3, end=6))
-    splited_pairs = list(variant_seq_extractor._split_overlapping([pair], 4))
-
-    assert splited_pairs[0][0].seq == "T"
-    assert splited_pairs[0][1].seq == "A"
-    assert splited_pairs[1][0].seq == "T"
-    assert splited_pairs[1][1].seq == "AA"
+def test_split():
+    # a deletion at 3 to 6 split at 5
+    assert VariantSeqExtractor._split([(3, 6, "T")], 5) == [(3, 5, "T"), (5, 6, "")]
+    # an insertion at 3 to 5 split at 4
+    assert VariantSeqExtractor._split([(3, 5, "AAA")], 4) == [(3, 4, "A"), (4, 5, "AA")]
+    assert VariantSeqExtractor._split([(3, 5, "AAA")], 4, keep="left") == [(3, 4, "A")]
+    assert VariantSeqExtractor._split([(3, 5, "AAA")], 4, keep="right") == [(4, 5, "AA")]
+    # a variant that ends or starts at the position stays whole
+    assert VariantSeqExtractor._split([(3, 5, "A"), (5, 6, "C")], 5) == [(3, 5, "A"), (5, 6, "C")]
 
 
 def test_extract(variant_seq_extractor):
