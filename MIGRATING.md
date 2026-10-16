@@ -138,6 +138,8 @@ The matchers use polars instead of pyranges:
   `interval.unstrand()` becomes `dataclasses.replace(interval, strand=".")`, and `interval.neg_strand` becomes `interval.strand == "-"`.
   `interval.swap_strand()` becomes `replace(interval, strand={"+": "-", "-": "+", ".": "."}[interval.strand])`.
   `interval.is_valid(chrom_len)` becomes `0 <= interval.start and interval.end <= chrom_len`.
+- `Interval.truncate` requires `chrom_len`, and `chrom_len` must be an int, not a float such as `math.inf`.
+  `interval.truncate()` without `chrom_len` becomes `replace(interval, start=max(interval.start, 0))`.
 - Two intervals are equal if all their fields are equal, including `attrs`. The hash leaves out `attrs`.
   In 0.1, `==` compared only `chrom`, `start`, `end` and `strand`, also with other objects that have these attributes.
   To compare the locations, compare `(i.chrom, i.start, i.end, i.strand)`.

@@ -125,7 +125,7 @@ def test_interval():
     assert i2.start == 0
     assert i2.end == 10
 
-    i2 = interval.shift(15, use_strand=True).truncate()
+    i2 = interval.shift(15, use_strand=True).truncate(chrom_len=20)
     assert i2.start == 0
     assert i2.end == 5
 
@@ -320,6 +320,8 @@ def test_interval_methods_raise_for_non_int_offsets():
         interval.slop(upstream=1.0)
     with pytest.raises(TypeError, match="^downstream must be an int, not str$"):
         interval.slop(downstream="1")
+    with pytest.raises(TypeError, match="^chrom_len must be an int, not float$"):
+        interval.truncate(20.0)
 
 
 def test_interval_methods_raise_for_start_greater_than_end():

@@ -1,6 +1,5 @@
 """Data classes for the major objects: Interval and Variant."""
 
-import math
 import numbers
 import re
 from collections.abc import Iterator, Mapping
@@ -334,15 +333,16 @@ class Interval:
             upstream, downstream = downstream, upstream
         return replace(self, start=self.start - upstream, end=self.end + downstream)
 
-    def truncate(self, chrom_len: float = math.inf) -> "Interval":
+    def truncate(self, chrom_len: int) -> "Interval":
         """Truncate the interval to the chromosome, from 0 to ``chrom_len``.
 
         :param chrom_len: length of the chromosome
         :returns: a new interval with ``start`` at least 0 and ``end`` at most ``chrom_len``
+        :raises TypeError: if ``chrom_len`` is not an int
         :raises ValueError: if ``end`` is negative, or if ``start`` is greater than ``chrom_len``
         """
-        # int turns a float chrom_len into an int, and min never returns the default math.inf
-        return replace(self, start=max(self.start, 0), end=int(min(self.end, chrom_len)))
+        _check_int(chrom_len, "chrom_len")
+        return replace(self, start=max(self.start, 0), end=min(self.end, chrom_len))
 
     def resize(self, width: int, *, anchor: _Anchor = "center", use_strand: bool = True) -> "Interval":
         """Resize the interval to ``width``, keeping its start, center or end.
