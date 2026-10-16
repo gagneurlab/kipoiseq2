@@ -31,6 +31,8 @@ def test_variant_seq_extractor_rejects_other_references():
 
 def test_variant_seq_extractor_takes_any_sequence_extractor():
     class Reference:
+        chrom_sizes = {"chr1": 5}
+
         def extract(self, interval):
             return "ACGTA"[interval.start : interval.end]
 
@@ -163,25 +165,44 @@ CHROM_LEN = 5000
 def test_extract_interval_at_chromosome_end(variant_seq_extractor, is_padding):
     # the interval covers the last 10 bases, so no padding is needed
     interval = Interval("chr1", CHROM_LEN - 10, CHROM_LEN)
-    seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN - 5, chrom_len=CHROM_LEN, is_padding=is_padding)
+    seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN - 5, is_padding=is_padding)
     assert seq == "ACGTAACGTA"
 
     # a deletion upstream of the anchor pulls in 2 bases after the chromosome end
     deletion = Variant("chr1", CHROM_LEN - 7, "GTA", "G")
     if is_padding:
-        seq = variant_seq_extractor.extract(
-            interval, [deletion], anchor=CHROM_LEN - 10, chrom_len=CHROM_LEN, is_padding=True
-        )
+        seq = variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10, is_padding=True)
         assert seq == "ACGACGTANN"
     else:
-        with pytest.raises(ValueError, match="is_padding"):
-            variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10, chrom_len=CHROM_LEN)
+        with pytest.raises(ValueError, match="needs bases outside chr1, which has 5000 bases. Pass is_padding=True"):
+            variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10)
 
 
-def test_extract_interval_beyond_chromosome_end(variant_seq_extractor):
+def test_extract_interval_at_chromosome_start(variant_seq_extractor):
+    # a deletion downstream of the anchor pulls in 2 bases before the chromosome start
+    interval = Interval("chr1", 0, 10)
+    deletion = Variant("chr1", 3, "GTA", "G")
+    assert variant_seq_extractor.extract(interval, [deletion], anchor=10, is_padding=True) == "NNACGACGTA"
+    with pytest.raises(ValueError, match="needs bases outside chr1"):
+        variant_seq_extractor.extract(interval, [deletion], anchor=10)
+
+
+@pytest.mark.parametrize("anchor", [CHROM_LEN - 5, CHROM_LEN, CHROM_LEN + 3])
+def test_extract_interval_beyond_chromosome_end(variant_seq_extractor, anchor):
+    # the N stand at the positions after the chromosome end, wherever the anchor is
     interval = Interval("chr1", CHROM_LEN - 5, CHROM_LEN + 5)
-    seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN, chrom_len=CHROM_LEN, is_padding=True)
-    assert seq == "ACGTANNNNN"
-    # chrom_len may be a float
-    float_len = float(CHROM_LEN)
-    assert variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN, chrom_len=float_len, is_padding=True) == seq
+    assert variant_seq_extractor.extract(interval, [], anchor=anchor, is_padding=True) == "ACGTANNNNN"
+    assert variant_seq_extractor.extract(interval, [], anchor=anchor, fixed_len=False, is_padding=True) == "ACGTANNNNN"
+    with pytest.raises(ValueError, match="needs bases outside chr1"):
+        variant_seq_extractor.extract(interval, [], anchor=anchor)
+
+
+def test_extract_interval_before_chromosome_start(variant_seq_extractor):
+    interval = Interval("chr1", -5, 5)
+    assert variant_seq_extractor.extract(interval, [], anchor=-5, is_padding=True) == "NNNNNACGTA"
+    assert variant_seq_extractor.extract(interval, [], anchor=0, fixed_len=False, is_padding=True) == "NNNNNACGTA"
+
+
+def test_extract_unknown_chrom(variant_seq_extractor):
+    with pytest.raises(ValueError, match="^chrom 'chr2' is not in the reference$"):
+        variant_seq_extractor.extract(Interval("chr2", 0, 10), [], anchor=0)

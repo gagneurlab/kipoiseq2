@@ -184,8 +184,9 @@ The matchers use polars instead of pyranges:
 - `VariantSeqExtractor(reference, *, use_strand)` takes the reference extractor as its first argument, instead of `fasta_file` or `reference_sequence`.
   `VariantSeqExtractor(fasta_file=path, use_strand=True)` becomes `VariantSeqExtractor(FastaStringExtractor(path, use_strand=False), use_strand=True)`,
   and `VariantSeqExtractor(reference_sequence=extractor, use_strand=True)` becomes `VariantSeqExtractor(extractor, use_strand=True)`.
-  It raises a TypeError if `reference` has no method `extract`.
-- `BaseExtractor` is gone. A reference extractor needs no base class: any object with the methods of the protocol `SequenceExtractor` fits.
+  It raises a TypeError if `reference` has no method `extract` or no attribute `chrom_sizes`.
+- `BaseExtractor` is gone. A reference extractor needs no base class: any object with the members of the protocol `SequenceExtractor` fits.
+  These are `extract(interval)` and `chrom_sizes`, a mapping of each chromosome name to its length.
 - `VariantSeqExtractor.ref_seq_extractor` and its deprecated alias `fasta` are gone. Keep the reference extractor that you pass instead.
 - `FastaStringExtractor` is a context manager, which closes the FASTA file at the end of a `with` block.
   `VariantSeqExtractor` opens no file, so it has no `close()`. You close the reference that you pass yourself.
@@ -194,3 +195,11 @@ The matchers use polars instead of pyranges:
 - `force_upper` of `FastaStringExtractor` is now `uppercase=True` by default, so the extracted sequences are uppercase.
   `Encoder` and `Tokenizer` are case-sensitive, so they take these sequences as they are.
   Pass `uppercase=False` to keep the lowercase letters of soft-masked repeats. `uppercase` is keyword-only.
+- `FastaStringExtractor.extract` raises a ValueError for an interval that starts before 0 or ends after the end of its chromosome, and for a chromosome that is not in the FASTA file.
+  In 0.1, an interval past the chromosome end gave a shorter sequence, and the other cases raised a pyfaidx `FetchError`.
+  It raises a TypeError if `interval` is not an `Interval`.
+- `FastaStringExtractor.chrom_sizes` maps each chromosome to its length.
+  The pyfaidx object `FastaStringExtractor.fasta` is private: use `chrom_sizes[chrom]` instead of `len(extractor.fasta[chrom])`, and `chrom_sizes.keys()` for the chromosome names.
+- `VariantSeqExtractor.extract` no longer takes `chrom_len`. It reads the length of the chromosome from `reference.chrom_sizes`.
+  If the sequence needs bases before 0 or after the end of the chromosome, it fills them with N for `is_padding=True` and raises a ValueError otherwise.
+  In 0.1, without `chrom_len`, the reference returned fewer bases at the chromosome end. For an anchor outside the chromosome, the N were at the wrong end.

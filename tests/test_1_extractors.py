@@ -49,6 +49,39 @@ def test_fasta_extractor_is_a_sequence_extractor():
         assert isinstance(fasta, SequenceExtractor)
 
 
+def test_fasta_extractor_chrom_sizes():
+    with FastaStringExtractor("tests/data/sample.5kb.fa", use_strand=False) as fasta:
+        assert fasta.chrom_sizes == {"chr1": 5000}
+        with pytest.raises(TypeError):
+            fasta.chrom_sizes["chr2"] = 10
+
+
+@pytest.mark.parametrize(
+    "interval", [Interval("chr1", 0, 0), Interval("chr1", 4990, 5000), Interval("chr1", 5000, 5000)]
+)
+def test_fasta_extractor_interval_at_chromosome_ends(interval):
+    with FastaStringExtractor("tests/data/sample.5kb.fa", use_strand=False) as fasta:
+        assert len(fasta.extract(interval)) == interval.width
+
+
+@pytest.mark.parametrize(
+    "interval", [Interval("chr1", -1, 5), Interval("chr1", 4990, 5001), Interval("chr1", 5001, 5010)]
+)
+def test_fasta_extractor_rejects_intervals_outside_the_chromosome(interval):
+    # in 0.1, an interval past the chromosome end gave a shorter sequence
+    with FastaStringExtractor("tests/data/sample.5kb.fa", use_strand=False) as fasta:
+        with pytest.raises(ValueError, match="must lie within 0 and 5000, the length of chr1$"):
+            fasta.extract(interval)
+
+
+def test_fasta_extractor_rejects_unknown_chrom_and_other_types():
+    with FastaStringExtractor("tests/data/sample.5kb.fa", use_strand=False) as fasta:
+        with pytest.raises(ValueError, match="^chrom 'chr2' is not in the reference$"):
+            fasta.extract(Interval("chr2", 0, 5))
+        with pytest.raises(TypeError, match="^interval must be an Interval, not str$"):
+            fasta.extract("chr1:0-5:+")
+
+
 def test_fasta_extractor_missing_file():
     with pytest.raises(FileNotFoundError):
         FastaStringExtractor("tests/data/missing.fa", use_strand=False)

@@ -1,8 +1,10 @@
 import os
-from types import TracebackType
+from collections.abc import Mapping
+from types import MappingProxyType, TracebackType
 from typing import Self
 
 from kipoiseq2.dataclasses import Interval
+from kipoiseq2.extractors.base import _chrom_size
 
 __all__ = ["FastaStringExtractor"]
 
@@ -77,12 +79,18 @@ class FastaStringExtractor:
         self.fasta_file = os.fspath(fasta_file)
         _check_compression(self.fasta_file)
         self._use_strand = use_strand
-        self.fasta = Fasta(self.fasta_file, sequence_always_upper=uppercase)
+        self._fasta = Fasta(self.fasta_file, sequence_always_upper=uppercase)
+        self._chrom_sizes = MappingProxyType({name: record.rlen for name, record in self._fasta.faidx.index.items()})
 
     @property
     def use_strand(self) -> bool:
         """If True, :meth:`extract` reverse complements the sequence of a "-" interval."""
         return self._use_strand
+
+    @property
+    def chrom_sizes(self) -> Mapping[str, int]:
+        """Length of each chromosome in the FASTA file, by name, from the index."""
+        return self._chrom_sizes
 
     def extract(self, interval: Interval, use_strand: bool | None = None) -> str:
         """
@@ -93,18 +101,26 @@ class FastaStringExtractor:
             is reverse complemented in case interval.strand == "-".
             Overrides ``self.use_strand``
         :returns: sequence of requested interval, in uppercase unless the extractor was built with ``uppercase=False``
+        :raises TypeError: if ``interval`` is not an Interval
+        :raises ValueError: if ``interval.chrom`` is not in the FASTA file,
+            or if ``interval`` starts before 0 or ends after the end of the chromosome
         """
+        if not isinstance(interval, Interval):
+            raise TypeError(f"interval must be an Interval, not {type(interval).__name__}")
+        chrom_size = _chrom_size(self._chrom_sizes, interval.chrom)
+        if interval.start < 0 or interval.end > chrom_size:
+            raise ValueError(f"interval {interval} must lie within 0 and {chrom_size}, the length of {interval.chrom}")
         # reverse-complement seq the negative strand
         if use_strand is None:
             use_strand = self.use_strand
         rc = use_strand and interval.strand == "-"
 
         # pyfaidx wants a 1-based interval
-        return str(self.fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
+        return str(self._fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
 
     def close(self) -> None:
         """Close the FASTA file. Closing twice does not raise."""
-        self.fasta.close()
+        self._fasta.close()
 
     def __enter__(self) -> Self:
         return self

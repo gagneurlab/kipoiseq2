@@ -1,9 +1,8 @@
-import math
 from collections.abc import Iterable
 from typing import Optional
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors.base import SequenceExtractor
+from kipoiseq2.extractors.base import SequenceExtractor, _chrom_size
 
 __all__ = ["VariantSeqExtractor"]
 
@@ -29,6 +28,9 @@ def reverse_complement(seq: str) -> str:
         raise ValueError("Sequence contains non-DNA characters: {}".format(invalid))
     return comp[::-1]
 
+
+_OUTSIDE = "\0"
+"""Placeholder for a base outside the chromosome. ``extract`` turns it into N or raises a ValueError."""
 
 _Edit = tuple[int, int, str]
 """A variant as ``(start, end, alt)``: the ALT sequence replaces the reference from ``start`` to ``end``, 0-based, half-open."""
@@ -75,7 +77,6 @@ class VariantSeqExtractor:
         anchor: int,
         fixed_len: bool = True,
         use_strand: Optional[bool] = None,
-        chrom_len: float = math.inf,
         is_padding: bool = False,
     ) -> str:
         """
@@ -91,10 +92,13 @@ class VariantSeqExtractor:
         :param use_strand: if True, the extracted sequence
             is reverse complemented in case interval.strand == "-".
             Overrides ``self.use_strand``
-        :param chrom_len: length of the chromosome. If chrom_len == math.inf, the length of the chromosome is not
-            checked.
-        :param is_padding: if True, the sequence is padded with 'N's if sequence can't extend to the fixed length,
+        :param is_padding: if True, use N for the bases before 0 or after the end of the chromosome.
+            Otherwise raise a ValueError if the sequence needs such bases, e.g. because the interval
+            ends after the end of the chromosome, or because a deletion pulls in bases from beyond it.
+            The length of the chromosome comes from ``reference.chrom_sizes``.
         :returns: A single sequence (``str``) with all the variants applied.
+        :raises ValueError: if ``interval.chrom`` is not in ``reference.chrom_sizes``,
+            or if the sequence needs bases outside the chromosome and ``is_padding`` is False
         """
         anchor = max(min(anchor, interval.end), interval.start)
         edits = self._split([(v.start, v.end, v.alt) for v in variants], anchor)
@@ -113,11 +117,6 @@ class VariantSeqExtractor:
             iend = interval.end - sum(min(0, len(alt) - (end - start)) for start, end, alt in right)
         else:
             istart, iend = interval.start, interval.end
-
-        # the fetch interval is half-open, so it may end at chrom_len
-        istart = max(istart, 0)
-        # int keeps the end an int for a float chrom_len
-        iend = int(min(iend, chrom_len))
 
         # from the anchor outwards, the reference ranges between the variants and their ALT sequences
         left_pieces: list[_Piece] = []
@@ -139,15 +138,25 @@ class VariantSeqExtractor:
             prev = end
         right_pieces.append((prev, iend))
 
-        # fetch the reference, ignoring the strand
-        ref_seq = self._reference.extract(Interval(interval.chrom, istart, iend))
-        down_str = self._join(left_pieces, ref_seq, istart, iend)
-        up_str = self._join(right_pieces, ref_seq, istart, iend)
+        chrom_size = _chrom_size(self._reference.chrom_sizes, interval.chrom)
+        ref_seq = self._fetch(interval.chrom, istart, iend, chrom_size)
+        down_str = self._join(left_pieces, ref_seq, istart)
+        up_str = self._join(right_pieces, ref_seq, istart)
 
         if fixed_len:
-            down_str, up_str = self._cut_to_fix_len(down_str, up_str, interval, anchor, is_padding=is_padding)
+            # the deletions pulled in enough bases, so both parts are long enough.
+            # down_str[-n:] would keep the whole string for n == 0
+            down_str = down_str[len(down_str) - (anchor - interval.start) :]
+            up_str = up_str[: interval.end - anchor]
 
         seq = down_str + up_str
+        if _OUTSIDE in seq:
+            if not is_padding:
+                raise ValueError(
+                    f"the sequence of {interval} needs bases outside {interval.chrom}, which has {chrom_size} bases. "
+                    "Pass is_padding=True to fill them with N."
+                )
+            seq = seq.replace(_OUTSIDE, "N")
 
         if use_strand is None:
             use_strand = self.use_strand
@@ -174,40 +183,21 @@ class VariantSeqExtractor:
                 result.append((start, end, alt))
         return result
 
+    def _fetch(self, chrom: str, start: int, end: int, chrom_size: int) -> str:
+        """Return the "+" strand of the reference from ``start`` to ``end``, with ``_OUTSIDE`` outside the chromosome."""
+        n_before = max(0, min(end, 0) - start)
+        n_after = max(0, end - max(start, chrom_size))
+        # the strand "." keeps a reference with use_strand=True from reverse complementing
+        fetched = Interval(chrom, min(max(start, 0), chrom_size), min(max(end, 0), chrom_size))
+        return _OUTSIDE * n_before + self._reference.extract(fetched) + _OUTSIDE * n_after
+
     @staticmethod
-    def _join(pieces: list[_Piece], ref_seq: str, istart: int, iend: int) -> str:
-        """Join the pieces, with the reference ranges cut from ``ref_seq``, the reference from ``istart`` to ``iend``."""
+    def _join(pieces: list[_Piece], ref_seq: str, ref_start: int) -> str:
+        """Join the pieces, with the reference ranges cut from ``ref_seq``, the reference from ``ref_start`` on."""
         parts = []
         for piece in pieces:
             if isinstance(piece, str):
                 parts.append(piece)
-            else:
-                start, end = max(piece[0], istart), min(piece[1], iend)
-                if start < end:
-                    parts.append(ref_seq[start - istart : end - istart])
+            elif piece[0] < piece[1]:
+                parts.append(ref_seq[piece[0] - ref_start : piece[1] - ref_start])
         return "".join(parts)
-
-    @staticmethod
-    def _cut_to_fix_len(down_str, up_str, interval, anchor, is_padding=False):
-        down_len = anchor - interval.start
-        down_diff = len(down_str) - down_len
-        if down_diff > 0:
-            # down_str[-down_len:] would keep the whole string for down_len == 0
-            down_str = down_str[len(down_str) - down_len :]
-        elif down_diff < 0:
-            if is_padding:
-                down_str = "N" * abs(down_diff) + down_str
-            else:
-                raise ValueError("is_padding should be set to True, if the sequence can't extend to the fixed length")
-
-        up_len = interval.end - anchor
-        up_diff = len(up_str) - up_len
-        if up_diff > 0:
-            up_str = up_str[:up_len]
-        elif up_diff < 0:
-            if is_padding:
-                up_str = up_str + "N" * abs(up_diff)
-            else:
-                raise ValueError("is_padding should be set to True, if the sequence can't extend to the fixed length")
-
-        return down_str, up_str

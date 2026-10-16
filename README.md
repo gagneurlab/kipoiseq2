@@ -40,7 +40,7 @@ variants = [Variant("chr1", 15, "A", "T")]
 alt_seq = VariantSeqExtractor(fasta, use_strand=True).extract(interval, variants, anchor=10)
 ```
 
-`VariantSeqExtractor` reads the reference sequence from `fasta`, or from any object with the methods of `SequenceExtractor`.
+`VariantSeqExtractor` reads the reference sequence from `fasta`, or from any object with the members of `SequenceExtractor`.
 Close the FASTA file with `fasta.close()`, or open it in a `with` block.
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
