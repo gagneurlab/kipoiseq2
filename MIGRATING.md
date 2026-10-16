@@ -33,7 +33,7 @@ The matchers use polars instead of pyranges:
 - `variant_fetcher` and `VariantFetcher` are gone. Pass the path of a VCF file as `vcf_file`, or a polars frame or Variant objects as `variants`.
   Arguments after `variants` are keyword-only.
 - `SingleVariantMatcher` yields the pairs in VCF order instead of grouped by chromosome and strand.
-  With a sequence of Interval objects as `intervals`, it yields these objects, so they keep their name and attrs.
+  With a sequence of Interval objects as `intervals`, it yields these objects, so they keep their attrs.
 - With a VCF file or a polars frame as the variant source, the matchers yield new Variant objects with chrom, pos, ref and alt, and without `source`.
   For the genotypes of the samples, use `scan_vcf_genotypes`.
 - `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by `pairs()`, `scan_pairs()` and `iter_batches()`.
@@ -126,14 +126,15 @@ The matchers use polars instead of pyranges:
   `ReorderedOneHot.get_output_shape` has no replacement.
 - `Interval` is immutable. Its fields cannot be reassigned, `attrs` is a read-only copy of the given mapping, and `copy()` is gone.
   To change a field, use `dataclasses.replace`, e.g. `replace(interval, attrs={**interval.attrs, "gene_id": "g1"})`.
-- `Interval` takes `strand`, `name`, `score` and `attrs` only as keywords.
+- `Interval` takes `strand` and `attrs` only as keywords.
   In 0.1, `Interval("chr1", 0, 10, "-")` set `name` to `"-"` and kept the strand `"."`.
+- `Interval.name` and `Interval.score` are gone. Keep them in `attrs`, e.g. `Interval("chr1", 0, 10, attrs={"name": "a", "score": 1.5})`.
 - `Interval` checks its fields. It raises a TypeError if `start` or `end` is not an int, e.g. `10.0`.
-  It raises a ValueError if `start` is greater than `end`, if `strand` is not `"+"`, `"-"` or `"."`, or if `score` is NaN.
+  It raises a ValueError if `start` is greater than `end`, or if `strand` is not `"+"`, `"-"` or `"."`.
   Methods that would return such an interval raise the same ValueError, e.g. `slop` that removes more bases than the width, or `truncate` of an interval that starts after `chrom_len`.
 - `Interval.width` is a property: use `interval.width` instead of `interval.width()` and `len(interval)`.
   The aliases `chr` and `stop` are gone: use `chrom` and `end`.
-- Two intervals are equal if all their fields are equal, including `name`, `score` and `attrs`. The hash leaves out `attrs`.
+- Two intervals are equal if all their fields are equal, including `attrs`. The hash leaves out `attrs`.
   In 0.1, `==` compared only `chrom`, `start`, `end` and `strand`, also with other objects that have these attributes.
   To compare the locations, compare `(i.chrom, i.start, i.end, i.strand)`.
 - `use_strand` of `Interval.center` and `Interval.shift` is keyword-only, e.g. `interval.shift(10, use_strand=False)` instead of `interval.shift(10, False)`.

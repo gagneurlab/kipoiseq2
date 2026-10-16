@@ -210,13 +210,10 @@ class Interval:
     :param start: 0-based start position (inclusive). It may be negative, e.g. after :meth:`shift`.
     :param end: 0-based end position (exclusive), at least ``start``
     :param strand: ``"+"``, ``"-"`` or ``"."`` for an unknown strand
-    :param name: interval name
-    :param score: interval score
-    :param attrs: additional attributes. The interval keeps a read-only copy.
-    :raises TypeError: if ``chrom`` or ``name`` is not a str, if ``start`` or ``end`` is not an int,
-        if ``strand`` is not a str, if ``score`` is not a number, or if ``attrs`` is not a mapping
-    :raises ValueError: if ``start`` is greater than ``end``, if ``strand`` is not ``"+"``, ``"-"`` or ``"."``,
-        or if ``score`` is NaN
+    :param attrs: additional attributes, e.g. a name or a score. The interval keeps a read-only copy.
+    :raises TypeError: if ``chrom`` or ``strand`` is not a str, if ``start`` or ``end`` is not an int,
+        or if ``attrs`` is not a mapping
+    :raises ValueError: if ``start`` is greater than ``end``, or if ``strand`` is not ``"+"``, ``"-"`` or ``"."``
 
     Example:
 
@@ -224,15 +221,13 @@ class Interval:
     >>> interval.width
     10
     >>> interval.shift(5)
-    Interval('chr1', 5, 15, strand='-', name='', score=0.0, attrs={'gene_id': 'g1'})
+    Interval('chr1', 5, 15, strand='-', attrs={'gene_id': 'g1'})
     """
 
     chrom: str
     start: int
     end: int
     strand: _Strand
-    name: str
-    score: float
     attrs: Mapping[str, Any] = field(hash=False)
 
     def __init__(
@@ -242,17 +237,13 @@ class Interval:
         end: int,
         *,
         strand: _Strand = ".",
-        name: str = "",
-        score: float = 0,
         attrs: Mapping[str, Any] | None = None,
     ) -> None:
-        for value, field_name in ((chrom, "chrom"), (strand, "strand"), (name, "name")):
+        for value, field_name in ((chrom, "chrom"), (strand, "strand")):
             if not isinstance(value, str):
                 raise TypeError(f"{field_name} must be a str, not {type(value).__name__}")
         _check_int(start, "start")
         _check_int(end, "end")
-        if not isinstance(score, numbers.Real) or isinstance(score, bool):
-            raise TypeError(f"score must be a number, not {type(score).__name__}")
         if attrs is None:
             attrs = {}
         elif not isinstance(attrs, Mapping):
@@ -261,16 +252,11 @@ class Interval:
             raise ValueError(f"start must not be greater than end, got start={start}, end={end}")
         if strand not in _STRANDS:
             raise ValueError(f'strand must be "+", "-" or ".", got {strand!r}')
-        # a NaN score would make the interval unequal to itself
-        if math.isnan(score):
-            raise ValueError("score must not be NaN")
         # the dataclass is frozen, so the fields are set with object.__setattr__
         object.__setattr__(self, "chrom", chrom)
         object.__setattr__(self, "start", int(start))
         object.__setattr__(self, "end", int(end))
         object.__setattr__(self, "strand", strand)
-        object.__setattr__(self, "name", name)
-        object.__setattr__(self, "score", float(score))
         object.__setattr__(self, "attrs", _ReadOnlyDict(attrs))
 
     @property
@@ -316,7 +302,7 @@ class Interval:
         Example:
 
         >>> Interval("chr1", 10, 20, strand="-").shift(5)
-        Interval('chr1', 5, 15, strand='-', name='', score=0.0, attrs={})
+        Interval('chr1', 5, 15, strand='-', attrs={})
         """
         _check_int(offset, "offset")
         if use_strand and self.neg_strand:
@@ -327,10 +313,7 @@ class Interval:
         return f"{self.chrom}:{self.start}-{self.end}:{self.strand}"
 
     def __repr__(self) -> str:
-        return (
-            f"Interval({self.chrom!r}, {self.start}, {self.end}, strand={self.strand!r}, "
-            f"name={self.name!r}, score={self.score!r}, attrs={dict(self.attrs)!r})"
-        )
+        return f"Interval({self.chrom!r}, {self.start}, {self.end}, strand={self.strand!r}, attrs={dict(self.attrs)!r})"
 
     @classmethod
     def from_str(cls, s: str) -> "Interval":
@@ -404,9 +387,9 @@ class Interval:
 
         >>> interval = Interval("chr1", 10, 20, strand="-")
         >>> interval.resize(4, anchor="start")
-        Interval('chr1', 16, 20, strand='-', name='', score=0.0, attrs={})
+        Interval('chr1', 16, 20, strand='-', attrs={})
         >>> interval.resize(4, anchor="start", use_strand=False)
-        Interval('chr1', 10, 14, strand='-', name='', score=0.0, attrs={})
+        Interval('chr1', 10, 14, strand='-', attrs={})
         """
         _check_resize(width, anchor)
         start, end = _resize_bounds(self.start, self.end, width, anchor, reverse=use_strand and self.neg_strand)
@@ -426,7 +409,7 @@ class Interval:
         Example:
 
         >>> Interval("chr1", 10, 20, strand="-").slice(0, 3)
-        Interval('chr1', 17, 20, strand='-', name='', score=0.0, attrs={})
+        Interval('chr1', 17, 20, strand='-', attrs={})
         """
         _check_int(i, "i")
         _check_int(j, "j")

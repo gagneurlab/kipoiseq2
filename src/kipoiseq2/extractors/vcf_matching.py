@@ -149,7 +149,7 @@ class BaseVariantMatcher:
         and end (0-based, half-open), an optional strand column and the
         columns in ``interval_attrs``, or Interval objects (any iterable,
         e.g. a list or a generator). The matchers
-        yield Interval objects as given, so they keep their name and attrs.
+        yield Interval objects as given, so they keep their attrs.
     :param interval_attrs: columns of the ``intervals`` DataFrame to copy into
         ``Interval.attrs``. Not valid with Interval objects.
     :param variant_batch_size: number of variants per overlap join when

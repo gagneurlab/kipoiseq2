@@ -93,7 +93,7 @@ class ResizeInterval:
     >>> from kipoiseq2 import Interval
     >>> from kipoiseq2.transforms import ResizeInterval
     >>> ResizeInterval(4, anchor="start")(Interval("chr1", 10, 20, strand="-"))
-    Interval('chr1', 16, 20, strand='-', name='', score=0.0, attrs={})
+    Interval('chr1', 16, 20, strand='-', attrs={})
     """
 
     def __init__(self, width: int, *, anchor: _Anchor = "center", use_strand: bool = True) -> None:
