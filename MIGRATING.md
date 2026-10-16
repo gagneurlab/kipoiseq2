@@ -134,6 +134,10 @@ The matchers use polars instead of pyranges:
   Methods that would return such an interval raise the same ValueError, e.g. `slop` that removes more bases than the width, or `truncate` of an interval that starts after `chrom_len`.
 - `Interval.width` is a property: use `interval.width` instead of `interval.width()` and `len(interval)`.
   The aliases `chr` and `stop` are gone: use `chrom` and `end`.
+- `Interval.unstrand`, `swap_strand`, `neg_strand` and `is_valid` are gone.
+  `interval.unstrand()` becomes `dataclasses.replace(interval, strand=".")`, and `interval.neg_strand` becomes `interval.strand == "-"`.
+  `interval.swap_strand()` becomes `replace(interval, strand={"+": "-", "-": "+", ".": "."}[interval.strand])`.
+  `interval.is_valid(chrom_len)` becomes `0 <= interval.start and interval.end <= chrom_len`.
 - Two intervals are equal if all their fields are equal, including `attrs`. The hash leaves out `attrs`.
   In 0.1, `==` compared only `chrom`, `start`, `end` and `strand`, also with other objects that have these attributes.
   To compare the locations, compare `(i.chrom, i.start, i.end, i.strand)`.

@@ -96,7 +96,6 @@ def test_interval():
     assert interval.chrom == "chr1"
     assert interval.attrs == {}
     assert isinstance(str(interval), str)
-    assert interval.neg_strand
 
     assert interval.width == 10
 
@@ -113,8 +112,6 @@ def test_interval():
             setattr(interval, field_name, None)
     assert interval.strand == "-"
 
-    assert interval.unstrand().strand == "."
-
     i2 = interval.shift(10, use_strand=False)
 
     # original unchanged
@@ -128,15 +125,11 @@ def test_interval():
     assert i2.start == 0
     assert i2.end == 10
 
-    assert not interval.shift(20, use_strand=True).is_valid()
-
     i2 = interval.shift(15, use_strand=True).truncate()
     assert i2.start == 0
     assert i2.end == 5
 
     # the end is exclusive, so an interval may end at the chromosome end
-    assert interval.is_valid(chrom_len=20)
-    assert not interval.is_valid(chrom_len=19)
     assert interval.truncate(chrom_len=20) == interval
     i2 = interval.truncate(chrom_len=15)
     assert i2.start == 10
@@ -154,25 +147,13 @@ def test_interval():
     i2 = interval.resize(9)
     assert i2.start == 11 and i2.end == 20
 
-    i2 = interval.swap_strand()
-    assert interval.strand == "-"
-    assert i2.strand == "+"
-    assert i2.strand == "+"
-    assert i2.width == 10
-    i2 = i2.resize(11)
+    i2 = Interval("chr1", 10, 20, strand="+").resize(11)
     assert i2.start == 9 and i2.end == 20
 
     assert interval.center(use_strand=True) == 15
     assert interval.center(use_strand=False) == 15
 
-    i2 = interval.swap_strand()
-    assert i2.strand == "+"
-
-    i3 = i2.resize(11).shift(1)
-    assert i3.center(use_strand=True) == 16
-    assert i3.center(use_strand=False) == 16
-
-    i3 = i2.resize(11).shift(1)
+    i3 = Interval("chr1", 10, 20, strand="+").resize(11).shift(1)
     assert i3.center(use_strand=True) == 16
     assert i3.center(use_strand=False) == 16
 
@@ -443,10 +424,8 @@ def test_interval_slop_without_use_strand(strand):
         lambda i: i.resize(4),
         lambda i: i.shift(1),
         lambda i: i.slop(upstream=1),
-        lambda i: i.unstrand(),
-        lambda i: i.swap_strand(),
     ],
-    ids=["slice", "truncate", "resize", "shift", "slop", "unstrand", "swap_strand"],
+    ids=["slice", "truncate", "resize", "shift", "slop"],
 )
 def test_interval_methods_keep_attrs(method):
     interval = Interval("chr1", 10, 20, strand="-", attrs={"gene": "A"})

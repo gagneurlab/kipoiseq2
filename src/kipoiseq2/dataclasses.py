@@ -264,21 +264,6 @@ class Interval:
         """Number of bases of the interval, ``end - start``."""
         return self.end - self.start
 
-    @property
-    def neg_strand(self) -> bool:
-        """True if the strand is ``"-"``."""
-        return self.strand == "-"
-
-    def unstrand(self) -> "Interval":
-        """Return the interval with the strand ``"."``."""
-        return replace(self, strand=".")
-
-    def swap_strand(self) -> "Interval":
-        """Return the interval with the strand ``"-"`` for ``"+"``, ``"+"`` for ``"-"``, and ``"."`` for ``"."``."""
-        if self.strand == ".":
-            return replace(self)
-        return replace(self, strand="+" if self.strand == "-" else "-")
-
     def center(self, *, use_strand: bool = True) -> int:
         """Compute the center of the interval.
 
@@ -288,7 +273,7 @@ class Interval:
         :param use_strand: if False, compute the center of the unstranded interval, which is rounded up on all strands
         :returns: the 0-based center position
         """
-        return _center(self.start, self.end, reverse=use_strand and self.neg_strand)
+        return _center(self.start, self.end, reverse=use_strand and self.strand == "-")
 
     def shift(self, offset: int, *, use_strand: bool = True) -> "Interval":
         """Shift the interval downstream by ``offset`` bases.
@@ -305,7 +290,7 @@ class Interval:
         Interval('chr1', 5, 15, strand='-', attrs={})
         """
         _check_int(offset, "offset")
-        if use_strand and self.neg_strand:
+        if use_strand and self.strand == "-":
             offset = -offset
         return replace(self, start=self.start + offset, end=self.end + offset)
 
@@ -345,20 +330,12 @@ class Interval:
         """
         _check_int(upstream, "upstream")
         _check_int(downstream, "downstream")
-        if use_strand and self.neg_strand:
+        if use_strand and self.strand == "-":
             upstream, downstream = downstream, upstream
         return replace(self, start=self.start - upstream, end=self.end + downstream)
 
-    def is_valid(self, chrom_len: float = math.inf) -> bool:
-        """Check that the interval lies within [0, chrom_len).
-
-        :param chrom_len: length of the chromosome. An interval may end at
-            ``chrom_len``, because the end is exclusive.
-        """
-        return self.start >= 0 and self.end <= chrom_len
-
     def truncate(self, chrom_len: float = math.inf) -> "Interval":
-        """Truncate the interval to become valid.
+        """Truncate the interval to the chromosome, from 0 to ``chrom_len``.
 
         :param chrom_len: length of the chromosome
         :returns: a new interval with ``start`` at least 0 and ``end`` at most ``chrom_len``
@@ -392,7 +369,7 @@ class Interval:
         Interval('chr1', 10, 14, strand='-', attrs={})
         """
         _check_resize(width, anchor)
-        start, end = _resize_bounds(self.start, self.end, width, anchor, reverse=use_strand and self.neg_strand)
+        start, end = _resize_bounds(self.start, self.end, width, anchor, reverse=use_strand and self.strand == "-")
         return replace(self, start=start, end=end)
 
     def slice(self, i: int, j: int, *, use_strand: bool = True) -> "Interval":
@@ -415,6 +392,6 @@ class Interval:
         _check_int(j, "j")
         if not 0 <= i < j <= self.width:
             raise ValueError(f"i and j must fulfill 0 <= i < j <= width, got i={i}, j={j} and width={self.width}")
-        if use_strand and self.neg_strand:
+        if use_strand and self.strand == "-":
             return replace(self, start=self.end - j, end=self.end - i)
         return replace(self, start=self.start + i, end=self.start + j)
