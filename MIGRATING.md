@@ -219,6 +219,8 @@ The matchers use polars instead of pyranges:
 - `kipoiseq2.utils.parse_dtype` is gone, because it called `eval()` on strings, and only `ReorderedOneHot` used it.
   For a dtype name, use `np.dtype(name)`, e.g. `np.dtype("float32")`.
 - `SplitSplicingSeq` is gone, because only the MMSplice dataloader used it. Keep using `kipoiseq` for it.
-- `kipoiseq2.utils.to_scalar` and `batch_iter` are gone:
+- The module `kipoiseq2.utils` is gone. Its `DNA`, `RNA` and `AMINO_ACIDS` moved to `kipoiseq2.alphabets` in 0.2.
+  Its other helpers have these replacements:
   - `to_scalar(x)` becomes `x.item()` for a numpy scalar.
   - `batch_iter(items, n)` becomes `itertools.batched(items, n)`, which yields tuples instead of lists.
+  - `parse_alphabet(alphabet)` becomes `list(alphabet)`. For `Encoder` and `Tokenizer`, pass `Alphabet(list(alphabet))` from `kipoiseq2.alphabets`.
