@@ -45,7 +45,7 @@ class VariantSeqExtractor(BaseExtractor):
     Sequence extractor which allows to obtain the alternative sequence,
     given some interval and variants inside this interval.
 
-    :param fasta_file: path to the fasta file (can be gzipped)
+    :param fasta_file: path to the FASTA file, see :class:`~kipoiseq2.extractors.FastaStringExtractor`
     :param reference_sequence: extractor returning the reference sequence given some interval
     :param use_strand: if True, the extracted sequence
         is reverse complemented in case interval.strand == "-"

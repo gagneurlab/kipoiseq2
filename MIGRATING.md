@@ -182,3 +182,5 @@ The matchers use polars instead of pyranges:
   `force_upper` is keyword-only too: `FastaStringExtractor(path, True, True)` becomes `FastaStringExtractor(path, use_strand=True, force_upper=True)`.
 - `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` raise a TypeError for unknown arguments.
   In 0.1, they ignored them, so a typo like `fixed_length=False` had no effect.
+- `FastaStringExtractor` raises a ValueError for a FASTA file that is compressed with gzip instead of bgzip, and an ImportError for a bgzip file if Biopython is missing.
+  In 0.1, pyfaidx raised an ImportError about Biopython for a gzip file whose name ends in `.gz`, and a UnicodeDecodeError for other gzip files.
