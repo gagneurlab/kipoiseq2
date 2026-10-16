@@ -1,7 +1,6 @@
 from collections.abc import Iterable
-from typing import Optional
 
-from kipoiseq2.dataclasses import Interval, Variant
+from kipoiseq2.dataclasses import Interval, Variant, _check_int
 from kipoiseq2.extractors.base import SequenceExtractor, _chrom_size
 
 __all__ = ["VariantSeqExtractor"]
@@ -56,7 +55,7 @@ class VariantSeqExtractor:
 
     >>> with FastaStringExtractor("genome.fa", use_strand=False) as fasta:  # doctest: +SKIP
     ...     extractor = VariantSeqExtractor(fasta, use_strand=True)
-    ...     seq = extractor.extract(interval, variants, anchor=interval.start)
+    ...     seq = extractor.extract(interval, variants, anchor_pos=interval.start)
     """
 
     def __init__(self, reference: SequenceExtractor, *, use_strand: bool) -> None:
@@ -74,37 +73,56 @@ class VariantSeqExtractor:
         self,
         interval: Interval,
         variants: Iterable[Variant],
-        anchor: int,
-        fixed_len: bool = True,
-        use_strand: Optional[bool] = None,
-        is_padding: bool = False,
+        *,
+        anchor_pos: int | None = None,
+        pad_with_n: bool = False,
     ) -> str:
-        """
-        :param interval: the region of interest from
-            which to query the sequence. 0-based
-        :param variants: variants overlapping the ``interval``.
-            can also be indels. 1-based
-        :param anchor: absolution position w.r.t. the interval start. (0-based).
-            E.g. for an interval of ``chr1:10-20`` the anchor of 10 denotes
-            the point chr1:10 in the 0-based coordinate system.
-        :param fixed_len: if True, the return sequence will have the same length
-            as the ``interval`` (e.g. ``interval.end - interval.start``)
-        :param use_strand: if True, the extracted sequence
-            is reverse complemented in case interval.strand == "-".
-            Overrides ``self.use_strand``
-        :param is_padding: if True, use N for the bases before 0 or after the end of the chromosome.
-            Otherwise raise a ValueError if the sequence needs such bases, e.g. because the interval
-            ends after the end of the chromosome, or because a deletion pulls in bases from beyond it.
+        """Return the sequence of ``interval`` with the variants applied.
+
+        If ``anchor_pos`` is None, the sequence covers the reference from ``interval.start`` to ``interval.end``
+        with the parts of the variants within the interval, so indels change its length.
+
+        If ``anchor_pos`` is an int, the sequence keeps the width of the interval.
+        The variants left of ``anchor_pos`` change the part from ``interval.start`` to ``anchor_pos``.
+        This part then keeps its length: it gets cut at ``interval.start``, or extended there with reference bases.
+        The variants right of ``anchor_pos`` change the part from ``anchor_pos`` to ``interval.end``,
+        which gets cut or extended at ``interval.end``.
+        So a deletion pulls in reference bases from beyond the interval, and an insertion pushes bases out of it.
+        A variant lies left of ``anchor_pos`` if its REF does.
+        A variant whose REF spans ``anchor_pos`` is split there: the first ``anchor_pos - variant.start`` bases
+        of its REF and ALT lie left, and the rest right.
+        For example, the insertion A>AGGG with its REF at ``anchor_pos - 1`` lies left entirely.
+        GenomeKit normalizes it to an insertion at ``anchor_pos`` and puts it right.
+
+        :param interval: the region of the sequence
+        :param variants: the variants to apply, on the chromosome of ``interval``.
+            Variants whose REF does not overlap ``interval`` have no effect.
+        :param anchor_pos: None, or a 0-based position from ``interval.start`` to ``interval.end``.
+            If None, the length of the sequence follows the variants.
+            Otherwise the sequence has the width of ``interval``, anchored at ``anchor_pos`` as described above.
+        :param pad_with_n: if True, use N for the bases before 0 or after the end of the chromosome.
+            Otherwise raise a ValueError if the sequence needs such bases.
+            It needs them if ``interval`` runs past an end of the chromosome.
+            With ``anchor_pos``, it also needs them if a deletion pulls in bases from beyond an end of the chromosome.
             The length of the chromosome comes from ``reference.chrom_sizes``.
-        :returns: A single sequence (``str``) with all the variants applied.
-        :raises TypeError: if ``interval`` is not an Interval, or if a variant is not a Variant
-        :raises ValueError: if ``interval.chrom`` is not in ``reference.chrom_sizes``,
+        :returns: the sequence, reverse complemented for a "-" interval if :attr:`use_strand` is True
+        :raises TypeError: if ``interval`` is not an Interval, if a variant is not a Variant,
+            or if ``anchor_pos`` is neither None nor an int
+        :raises ValueError: if ``anchor_pos`` lies outside ``interval``,
+            if ``interval.chrom`` is not in ``reference.chrom_sizes``,
             if a variant lies on another chromosome than ``interval`` or outside the chromosome,
             if the REF of a variant differs from the reference, ignoring case,
-            or if the sequence needs bases outside the chromosome and ``is_padding`` is False
+            or if the sequence needs bases outside the chromosome and ``pad_with_n`` is False
         """
         if not isinstance(interval, Interval):
             raise TypeError(f"interval must be an Interval, not {type(interval).__name__}")
+        if anchor_pos is not None:
+            _check_int(anchor_pos, "anchor_pos")
+            if not interval.start <= anchor_pos <= interval.end:
+                raise ValueError(
+                    f"anchor_pos must lie within {interval.start} and {interval.end}, the bounds of {interval}, "
+                    f"got {anchor_pos}"
+                )
         chrom_size = _chrom_size(self._reference.chrom_sizes, interval.chrom)
         variants = list(variants)
         for v in variants:
@@ -115,18 +133,20 @@ class VariantSeqExtractor:
             if v.start < 0 or v.end > chrom_size:
                 raise ValueError(f"variant {v} lies outside {v.chrom}, which has {chrom_size} bases")
 
-        anchor = max(min(anchor, interval.end), interval.start)
-        edits = self._split([(v.start, v.end, v.alt) for v in variants], anchor)
-        if not fixed_len:
-            # keep only the parts of the variants within the interval
-            edits = self._split(edits, interval.start, keep="right")
-            edits = self._split(edits, interval.end, keep="left")
+        edits = [(v.start, v.end, v.alt) for v in variants]
+        if anchor_pos is None:
+            # keep only the parts of the variants within the interval, which all lie right of its start
+            anchor = interval.start
+            edits = self._split(self._split(edits, interval.start, keep="right"), interval.end, keep="left")
+        else:
+            anchor = anchor_pos
+            edits = self._split(edits, anchor)
 
         # the variants right of the anchor in genomic order, and those left of it in reverse order
         right = sorted((e for e in edits if e[0] >= anchor), key=lambda e: e[0])
         left = sorted((e for e in edits if e[0] < anchor), key=lambda e: e[0], reverse=True)
 
-        if fixed_len:
+        if anchor_pos is not None:
             # deletions pull in reference bases from beyond the interval
             istart = interval.start + sum(min(0, len(alt) - (end - start)) for start, end, alt in left)
             iend = interval.end - sum(min(0, len(alt) - (end - start)) for start, end, alt in right)
@@ -165,7 +185,7 @@ class VariantSeqExtractor:
         down_str = self._join(left_pieces, ref_seq, fetch_start)
         up_str = self._join(right_pieces, ref_seq, fetch_start)
 
-        if fixed_len:
+        if anchor_pos is not None:
             # the deletions pulled in enough bases, so both parts are long enough.
             # down_str[-n:] would keep the whole string for n == 0
             down_str = down_str[len(down_str) - (anchor - interval.start) :]
@@ -173,16 +193,14 @@ class VariantSeqExtractor:
 
         seq = down_str + up_str
         if _OUTSIDE in seq:
-            if not is_padding:
+            if not pad_with_n:
                 raise ValueError(
                     f"the sequence of {interval} needs bases outside {interval.chrom}, which has {chrom_size} bases. "
-                    "Pass is_padding=True to fill them with N."
+                    "Pass pad_with_n=True to fill them with N."
                 )
             seq = seq.replace(_OUTSIDE, "N")
 
-        if use_strand is None:
-            use_strand = self.use_strand
-        if use_strand and interval.strand == "-":
+        if self._use_strand and interval.strand == "-":
             seq = reverse_complement(seq)
 
         return seq

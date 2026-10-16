@@ -37,7 +37,7 @@ def test_variant_seq_extractor_takes_any_sequence_extractor():
             return "ACGTA"[interval.start : interval.end]
 
     extractor = VariantSeqExtractor(Reference(), use_strand=True)
-    assert extractor.extract(Interval("chr1", 0, 5), [Variant("chr1", 2, "C", "T")], anchor=0) == "ATGTA"
+    assert extractor.extract(Interval("chr1", 0, 5), [Variant("chr1", 2, "C", "T")], anchor_pos=0) == "ATGTA"
 
 
 def test_variant_seq_extractor_requires_use_strand_keyword():
@@ -49,9 +49,16 @@ def test_variant_seq_extractor_requires_use_strand_keyword():
     reference.close()
 
 
-def test_variant_seq_extractor_extract_rejects_unknown_arguments(variant_seq_extractor):
-    with pytest.raises(TypeError, match="fixed_length"):
-        variant_seq_extractor.extract(Interval("chr1", 0, 3), [], anchor=0, fixed_length=False)
+@pytest.mark.parametrize("name", ["fixed_length", "anchor", "fixed_len", "is_padding", "use_strand"])
+def test_variant_seq_extractor_extract_rejects_unknown_arguments(variant_seq_extractor, name):
+    # the options of 0.1 are gone too
+    with pytest.raises(TypeError, match=name):
+        variant_seq_extractor.extract(Interval("chr1", 0, 3), [], **{name: False})
+
+
+def test_variant_seq_extractor_extract_options_are_keyword_only(variant_seq_extractor):
+    with pytest.raises(TypeError, match="positional"):
+        variant_seq_extractor.extract(Interval("chr1", 0, 3), [], 0)
 
 
 @pytest.mark.parametrize("strand", ["+", "-", "."])
@@ -60,14 +67,12 @@ def test_variant_seq_extractor_reference_with_use_strand(variant_seq_extractor, 
     # does not reverse complement the sequence a second time
     variants = [Variant("chr1", 4, "T", "C"), Variant("chr1", 5, "A", "GA")]
     interval = Interval("chr1", 2, 9, strand=strand)
-    expected = variant_seq_extractor.extract(interval, variants, anchor=5)
+    expected = variant_seq_extractor.extract(interval, variants, anchor_pos=5)
     assert expected == ("ACGTTCG" if strand == "-" else "CGAACGT")
     with FastaStringExtractor(fasta_file, use_strand=True) as reference:
         extractor = VariantSeqExtractor(reference, use_strand=True)
-        assert extractor.extract(interval, variants, anchor=5) == expected
-        assert extractor.extract(interval, variants, anchor=5, fixed_len=False) == variant_seq_extractor.extract(
-            interval, variants, anchor=5, fixed_len=False
-        )
+        assert extractor.extract(interval, variants, anchor_pos=5) == expected
+        assert extractor.extract(interval, variants) == variant_seq_extractor.extract(interval, variants)
 
 
 def test_split():
@@ -87,72 +92,96 @@ def test_extract(variant_seq_extractor):
 
     interval = Interval("chr1", 0, 30)
 
-    seq = variant_seq_extractor.extract(interval, variants, anchor=28, fixed_len=True, is_padding=True)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=28, pad_with_n=True)
     assert len(seq) == interval.end - interval.start
     assert seq == "NACGCGAACGTAACGTAACGTAACGTGATA"
 
     interval = Interval("chr1", 2, 9)
 
-    seq = variant_seq_extractor.extract(interval, variants, anchor=5)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=5)
     assert len(seq) == interval.end - interval.start
     assert seq == "CGAACGT"
 
     interval = Interval("chr1", 2, 9, strand="-")
-    seq = variant_seq_extractor.extract(interval, variants, anchor=5)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=5)
     assert len(seq) == interval.end - interval.start
     assert seq == "ACGTTCG"
 
     interval = Interval("chr1", 4, 14)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=7)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=7)
     assert len(seq) == interval.end - interval.start
     assert seq == "AACGTAACGT"
 
     interval = Interval("chr1", 4, 14)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=4)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=4)
     assert len(seq) == interval.end - interval.start
     assert seq == "GAACGTAACG"
 
     interval = Interval("chr1", 2, 5)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=3)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=3)
     assert len(seq) == interval.end - interval.start
     assert seq == "GCG"
 
     interval = Interval("chr1", 24, 34)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=27)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=27)
     assert len(seq) == interval.end - interval.start
     assert seq == "TGATAACGTA"
 
     interval = Interval("chr1", 25, 35)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=34)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=34)
     assert len(seq) == interval.end - interval.start
     assert seq == "TGATAACGTA"
 
     interval = Interval("chr1", 34, 44)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=37)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=37)
     assert len(seq) == interval.end - interval.start
     assert seq == "AACGTAACGT"
 
     interval = Interval("chr1", 34, 44)
-    seq = variant_seq_extractor.extract(interval, variants, anchor=100)
+    seq = variant_seq_extractor.extract(interval, variants, anchor_pos=44)
     assert len(seq) == interval.end - interval.start
     assert seq == "AACGTAACGT"
 
+    # without anchor_pos, the insertion with its REF before the interval has no effect
     interval = Interval("chr1", 5, 11, strand="+")
-    seq = variant_seq_extractor.extract(interval, variants, anchor=10, fixed_len=False)
+    seq = variant_seq_extractor.extract(interval, variants)
     assert seq == "ACGTAA"
 
+    # the insertion with its REF in the interval makes the sequence longer
+    interval = Interval("chr1", 4, 11, strand="+")
+    seq = variant_seq_extractor.extract(interval, variants)
+    assert seq == "GAACGTAA"
+
+    # only the part of the deletion within the interval applies
+    interval = Interval("chr1", 26, 30, strand="+")
+    seq = variant_seq_extractor.extract(interval, variants)
+    assert seq == "TA"
+
     interval = Interval("chr1", 0, 3, strand="+")
-    seq = variant_seq_extractor.extract(interval, variants, anchor=10, fixed_len=False)
+    seq = variant_seq_extractor.extract(interval, variants)
     assert seq == "ACG"
 
 
-@pytest.mark.parametrize("anchor", [15, 20, 25])
-def test_extract_deletion_before_interval(variant_seq_extractor, anchor):
-    # the deletion lies before the interval, so the sequence is the reference of the interval.
-    # The anchor 15 is clamped to the interval start.
+def test_extract_anchor_rule(variant_seq_extractor):
+    # the reference of the interval is ACGTAACGTA
+    interval = Interval("chr1", 0, 10)
+    # the REF of the insertion lies at anchor_pos - 1, so the insertion lies left and pushes out bases at the start.
+    # GenomeKit would put it right of anchor_pos.
+    insertion = Variant("chr1", 5, "A", "AGGG")
+    assert variant_seq_extractor.extract(interval, [insertion], anchor_pos=5) == "TAGGGACGTA"
+    # the REF of the insertion lies at anchor_pos, so the insertion lies right and pushes out bases at the end
+    assert variant_seq_extractor.extract(interval, [insertion], anchor_pos=4) == "ACGTAGGGAC"
+    # the REF TAA spans anchor_pos: TA becomes GC left of anchor_pos, and the last A is deleted right of it
+    mnv = Variant("chr1", 4, "TAA", "GC")
+    assert variant_seq_extractor.extract(interval, [mnv], anchor_pos=5) == "ACGGCCGTAA"
+
+
+@pytest.mark.parametrize("anchor_pos", [20, 25, 30])
+def test_extract_deletion_before_interval(variant_seq_extractor, anchor_pos):
+    # the deletion lies before the interval, so the sequence is the reference of the interval
     interval = Interval("chr1", 20, 30)
     deletion = Variant("chr1", 12, "CG", "C")
-    seq = variant_seq_extractor.extract(interval, [deletion], anchor=anchor, fixed_len=True)
+    seq = variant_seq_extractor.extract(interval, [deletion], anchor_pos=anchor_pos)
     assert len(seq) == interval.end - interval.start
     assert seq == "ACGTAACGTA"
 
@@ -161,78 +190,79 @@ def test_extract_deletion_before_interval(variant_seq_extractor, anchor):
 CHROM_LEN = 5000
 
 
-@pytest.mark.parametrize("is_padding", [False, True])
-def test_extract_interval_at_chromosome_end(variant_seq_extractor, is_padding):
+@pytest.mark.parametrize("pad_with_n", [False, True])
+def test_extract_interval_at_chromosome_end(variant_seq_extractor, pad_with_n):
     # the interval covers the last 10 bases, so no padding is needed
     interval = Interval("chr1", CHROM_LEN - 10, CHROM_LEN)
-    seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN - 5, is_padding=is_padding)
+    seq = variant_seq_extractor.extract(interval, [], anchor_pos=CHROM_LEN - 5, pad_with_n=pad_with_n)
     assert seq == "ACGTAACGTA"
 
     # a deletion upstream of the anchor pulls in 2 bases after the chromosome end
     deletion = Variant("chr1", CHROM_LEN - 7, "GTA", "G")
-    if is_padding:
-        seq = variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10, is_padding=True)
+    if pad_with_n:
+        seq = variant_seq_extractor.extract(interval, [deletion], anchor_pos=CHROM_LEN - 10, pad_with_n=True)
         assert seq == "ACGACGTANN"
     else:
-        with pytest.raises(ValueError, match="needs bases outside chr1, which has 5000 bases. Pass is_padding=True"):
-            variant_seq_extractor.extract(interval, [deletion], anchor=CHROM_LEN - 10)
+        with pytest.raises(ValueError, match="needs bases outside chr1, which has 5000 bases. Pass pad_with_n=True"):
+            variant_seq_extractor.extract(interval, [deletion], anchor_pos=CHROM_LEN - 10)
 
 
 def test_extract_interval_at_chromosome_start(variant_seq_extractor):
     # a deletion downstream of the anchor pulls in 2 bases before the chromosome start
     interval = Interval("chr1", 0, 10)
     deletion = Variant("chr1", 3, "GTA", "G")
-    assert variant_seq_extractor.extract(interval, [deletion], anchor=10, is_padding=True) == "NNACGACGTA"
+    assert variant_seq_extractor.extract(interval, [deletion], anchor_pos=10, pad_with_n=True) == "NNACGACGTA"
     with pytest.raises(ValueError, match="needs bases outside chr1"):
-        variant_seq_extractor.extract(interval, [deletion], anchor=10)
+        variant_seq_extractor.extract(interval, [deletion], anchor_pos=10)
 
 
-@pytest.mark.parametrize("anchor", [CHROM_LEN - 5, CHROM_LEN, CHROM_LEN + 3])
-def test_extract_interval_beyond_chromosome_end(variant_seq_extractor, anchor):
+@pytest.mark.parametrize("anchor_pos", [CHROM_LEN - 5, CHROM_LEN, CHROM_LEN + 3])
+def test_extract_interval_beyond_chromosome_end(variant_seq_extractor, anchor_pos):
     # the N stand at the positions after the chromosome end, wherever the anchor is
     interval = Interval("chr1", CHROM_LEN - 5, CHROM_LEN + 5)
-    assert variant_seq_extractor.extract(interval, [], anchor=anchor, is_padding=True) == "ACGTANNNNN"
-    assert variant_seq_extractor.extract(interval, [], anchor=anchor, fixed_len=False, is_padding=True) == "ACGTANNNNN"
+    assert variant_seq_extractor.extract(interval, [], anchor_pos=anchor_pos, pad_with_n=True) == "ACGTANNNNN"
+    # also without anchor_pos, the interval needs bases after the chromosome end
+    assert variant_seq_extractor.extract(interval, [], pad_with_n=True) == "ACGTANNNNN"
     with pytest.raises(ValueError, match="needs bases outside chr1"):
-        variant_seq_extractor.extract(interval, [], anchor=anchor)
+        variant_seq_extractor.extract(interval, [], anchor_pos=anchor_pos)
 
 
 def test_extract_interval_before_chromosome_start(variant_seq_extractor):
     interval = Interval("chr1", -5, 5)
-    assert variant_seq_extractor.extract(interval, [], anchor=-5, is_padding=True) == "NNNNNACGTA"
-    assert variant_seq_extractor.extract(interval, [], anchor=0, fixed_len=False, is_padding=True) == "NNNNNACGTA"
+    assert variant_seq_extractor.extract(interval, [], anchor_pos=-5, pad_with_n=True) == "NNNNNACGTA"
+    assert variant_seq_extractor.extract(interval, [], pad_with_n=True) == "NNNNNACGTA"
 
 
 def test_extract_unknown_chrom(variant_seq_extractor):
     with pytest.raises(ValueError, match="^chrom 'chr2' is not in the reference$"):
-        variant_seq_extractor.extract(Interval("chr2", 0, 10), [], anchor=0)
+        variant_seq_extractor.extract(Interval("chr2", 0, 10), [], anchor_pos=0)
 
 
 def test_extract_rejects_wrong_types(variant_seq_extractor):
     with pytest.raises(TypeError, match="^interval must be an Interval, not str$"):
-        variant_seq_extractor.extract("chr1:0-10:+", [], anchor=0)
+        variant_seq_extractor.extract("chr1:0-10:+", [], anchor_pos=0)
     with pytest.raises(TypeError, match="^variants must be Variants, not str$"):
-        variant_seq_extractor.extract(Interval("chr1", 0, 10), ["chr1:2:C>T"], anchor=0)
+        variant_seq_extractor.extract(Interval("chr1", 0, 10), ["chr1:2:C>T"], anchor_pos=0)
 
 
 def test_extract_variant_on_other_chrom(variant_seq_extractor):
     with pytest.raises(ValueError, match="^variant chr2:2:C>T lies on another chromosome than the interval chr1:0-10"):
-        variant_seq_extractor.extract(Interval("chr1", 0, 10), [Variant("chr2", 2, "C", "T")], anchor=0)
+        variant_seq_extractor.extract(Interval("chr1", 0, 10), [Variant("chr2", 2, "C", "T")], anchor_pos=0)
 
 
 def test_extract_variant_outside_chromosome(variant_seq_extractor):
     variant = Variant("chr1", CHROM_LEN, "AC", "A")
     with pytest.raises(ValueError, match="^variant chr1:5000:AC>A lies outside chr1, which has 5000 bases$"):
-        variant_seq_extractor.extract(Interval("chr1", CHROM_LEN - 10, CHROM_LEN), [variant], anchor=CHROM_LEN)
+        variant_seq_extractor.extract(Interval("chr1", CHROM_LEN - 10, CHROM_LEN), [variant], anchor_pos=CHROM_LEN)
 
 
 def test_extract_ref_differs(variant_seq_extractor):
     # the reference has a G at position 3
     with pytest.raises(ValueError, match="^the REF of variant chr1:3:A>T differs from the reference 'G'$"):
-        variant_seq_extractor.extract(Interval("chr1", 0, 10), [Variant("chr1", 3, "A", "T")], anchor=0)
+        variant_seq_extractor.extract(Interval("chr1", 0, 10), [Variant("chr1", 3, "A", "T")], anchor_pos=0)
     # the REF of a variant outside the interval is checked too
     with pytest.raises(ValueError, match="differs from the reference 'GT'"):
-        variant_seq_extractor.extract(Interval("chr1", 20, 30), [Variant("chr1", 13, "TA", "T")], anchor=20)
+        variant_seq_extractor.extract(Interval("chr1", 20, 30), [Variant("chr1", 13, "TA", "T")], anchor_pos=20)
 
 
 @pytest.mark.parametrize("ref", ["C", "c"])
@@ -240,4 +270,18 @@ def test_extract_ref_ignores_case(ref):
     # sample.fasta has the sequence ACGTacgt, so with uppercase=False the reference has a lowercase c at position 6
     with FastaStringExtractor("tests/data/sample.fasta", use_strand=False, uppercase=False) as fasta:
         extractor = VariantSeqExtractor(fasta, use_strand=True)
-        assert extractor.extract(Interval("chr1", 0, 8), [Variant("chr1", 6, ref, "T")], anchor=0) == "ACGTaTgt"
+        assert extractor.extract(Interval("chr1", 0, 8), [Variant("chr1", 6, ref, "T")], anchor_pos=0) == "ACGTaTgt"
+
+
+@pytest.mark.parametrize("anchor_pos", [19, 31, -1])
+def test_extract_anchor_pos_outside_interval(variant_seq_extractor, anchor_pos):
+    with pytest.raises(
+        ValueError, match=f"^anchor_pos must lie within 20 and 30, the bounds of chr1:20-30:., got {anchor_pos}$"
+    ):
+        variant_seq_extractor.extract(Interval("chr1", 20, 30), [], anchor_pos=anchor_pos)
+
+
+@pytest.mark.parametrize("anchor_pos", [20.0, "20", True])
+def test_extract_anchor_pos_not_int(variant_seq_extractor, anchor_pos):
+    with pytest.raises(TypeError, match="^anchor_pos must be an int, not"):
+        variant_seq_extractor.extract(Interval("chr1", 20, 30), [], anchor_pos=anchor_pos)

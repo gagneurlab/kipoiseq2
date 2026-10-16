@@ -92,15 +92,13 @@ class FastaStringExtractor:
         """Length of each chromosome in the FASTA file, by name, from the index."""
         return self._chrom_sizes
 
-    def extract(self, interval: Interval, use_strand: bool | None = None) -> str:
+    def extract(self, interval: Interval) -> str:
         """
         Returns the FASTA sequence in some given interval as string
 
         :param interval: the interval to query
-        :param use_strand: if True, the extracted sequence
-            is reverse complemented in case interval.strand == "-".
-            Overrides ``self.use_strand``
-        :returns: sequence of requested interval, in uppercase unless the extractor was built with ``uppercase=False``
+        :returns: sequence of requested interval, reverse complemented for a "-" interval if :attr:`use_strand`
+            is True. The letters are uppercase unless the extractor was built with ``uppercase=False``.
         :raises TypeError: if ``interval`` is not an Interval
         :raises ValueError: if ``interval.chrom`` is not in the FASTA file,
             or if ``interval`` starts before 0 or ends after the end of the chromosome
@@ -111,9 +109,7 @@ class FastaStringExtractor:
         if interval.start < 0 or interval.end > chrom_size:
             raise ValueError(f"interval {interval} must lie within 0 and {chrom_size}, the length of {interval.chrom}")
         # reverse-complement seq the negative strand
-        if use_strand is None:
-            use_strand = self.use_strand
-        rc = use_strand and interval.strand == "-"
+        rc = self._use_strand and interval.strand == "-"
 
         # pyfaidx wants a 1-based interval
         return str(self._fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)

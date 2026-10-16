@@ -201,8 +201,15 @@ The matchers use polars instead of pyranges:
 - `FastaStringExtractor.chrom_sizes` maps each chromosome to its length.
   The pyfaidx object `FastaStringExtractor.fasta` is private: use `chrom_sizes[chrom]` instead of `len(extractor.fasta[chrom])`, and `chrom_sizes.keys()` for the chromosome names.
 - `VariantSeqExtractor.extract` no longer takes `chrom_len`. It reads the length of the chromosome from `reference.chrom_sizes`.
-  If the sequence needs bases before 0 or after the end of the chromosome, it fills them with N for `is_padding=True` and raises a ValueError otherwise.
+  If the sequence needs bases before 0 or after the end of the chromosome, it fills them with N for `pad_with_n=True` and raises a ValueError otherwise.
   In 0.1, without `chrom_len`, the reference returned fewer bases at the chromosome end. For an anchor outside the chromosome, the N were at the wrong end.
 - `VariantSeqExtractor.extract` checks the variants. It raises a ValueError for a variant on another chromosome than `interval`, for a variant outside the chromosome, and for a variant whose REF differs from the reference, ignoring case.
   In 0.1, it replaced the reference bases at the position of such a variant with its ALT.
   It raises a TypeError if `interval` is not an `Interval` or a variant is not a `Variant`.
+- `VariantSeqExtractor.extract(interval, variants, *, anchor_pos=None, pad_with_n=False)` takes its options only as keywords.
+  `anchor` and `fixed_len` become `anchor_pos`: `anchor=a` becomes `anchor_pos=a`, and `anchor=a, fixed_len=False` becomes `anchor_pos=None`.
+  `is_padding` is renamed to `pad_with_n`.
+- `VariantSeqExtractor.extract` raises a ValueError unless `interval.start <= anchor_pos <= interval.end`.
+  In 0.1, it moved an anchor outside the interval to the nearest end of the interval.
+- `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` no longer take `use_strand`.
+  Create the extractor with the `use_strand` you need instead.
