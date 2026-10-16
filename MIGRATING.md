@@ -27,6 +27,8 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - `VariantIntervalQueryable` and the query classes of `kipoiseq.extractors.vcf_query` are gone: filter the polars frames instead.
 - `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with `scan_variant_pairs`, and apply them with `iter_variant_seqs`, which yields batches of reference and alternative sequences.
   `VariantSeqExtractor` applies the variants of one interval.
+  For the variants that a sample carries, as with `sample_id`, take the variants from `scan_vcf_genotypes(path)` and group by `["interval_idx", "variant_sample"]`.
+  For one sequence per haplotype, take them from `scan_vcf_genotypes(path, haplotypes=True)` and group by `["interval_idx", "variant_sample", "variant_haplotype"]`.
 - `Variant.from_cyvcf` and `Variant.from_cyvcf_and_given_alt` are gone.
   A `Variant` has only `chrom`, `pos`, `ref` and `alt`, so `id`, `qual`, `filter`, `info`, `source` and `copy()` are gone.
   The VCF columns ID, QUAL, FILTER and INFO stay in the frame of `scan_vcf_variants`.

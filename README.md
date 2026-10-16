@@ -129,6 +129,11 @@ carriers = scan_vcf_genotypes("variants.vcf.gz", format_fields=["GT", "GQ"])
 carriers.sink_csv("carriers.csv")
 ```
 
+`haplotypes=True` gives one row per haplotype of each sample, with the column `haplotype`: the position of the allele in GT, e.g. 0 or 1 for a diploid GT.
+`carrier` then tells whether this haplotype carries the ALT allele.
+`haplotype` ignores the phasing, as `bcftools consensus -H` does: for an unphased GT such as 0/1, the order of the alleles in GT sets the haplotype.
+`~pl.col("GT").str.contains("/")` keeps the phased and haploid GTs.
+
 ### Matching variants with intervals
 
 `scan_variant_pairs` finds every interval-variant pair with one [polars-bio](https://biodatageeks.org/polars-bio/) overlap join.
@@ -203,6 +208,22 @@ A variant within 500 bases of a chromosome end gets a window that runs past the 
 `group_by=["interval_idx"]` applies all variants of an interval together.
 Variants that overlap within a row raise a ValueError, as in `VariantSeqExtractor`.
 Each pair applies its ALT allele. So for the genotypes of `scan_vcf_genotypes`, keep the default `carriers_only=True`: a False or a null in the column `variant_carrier` raises a ValueError.
+For the sequences of the haplotypes, take the variants from `scan_vcf_genotypes(path, haplotypes=True)`, and group by sample and haplotype:
+
+```python
+from kipoiseq2.extractors import scan_vcf_genotypes
+
+genes = pl.DataFrame({"chrom": ["chr1"], "start": [1000], "end": [3000], "strand": ["-"], "gene_id": ["g1"]})
+# the pairs get the columns variant_sample and variant_haplotype
+pairs = scan_variant_pairs(genes, scan_vcf_genotypes("variants.vcf.gz", haplotypes=True))
+
+with FastaStringExtractor("genome.fa", use_strand=False) as fasta:
+    group_by = ["interval_idx", "variant_sample", "variant_haplotype"]
+    for batch in iter_variant_seqs(pairs, fasta, use_strand=True, group_by=group_by):
+        alt = batch["alt"].to_numpy()  # one row per gene and haplotype that carries variants in it
+```
+
+A haplotype without variants in an interval gives no row. Its sequence is the `ref_seq` of the interval.
 `encoding=Encoder()` gives uint8 one-hot arrays of shape `(rows, width, 4)`, and `encoding=None` gives only the sequences.
 `anchor="start"` or `"end"` keeps the 5' or the 3' end of the interval, and `anchor=None` lets indels change the length of `alt_seq`.
 Sequences of different lengths give polars List columns instead of Array columns.

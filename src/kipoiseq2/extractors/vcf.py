@@ -2,7 +2,8 @@
 
 :func:`scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame,
 with one row per ALT allele. :func:`scan_vcf_genotypes` adds one row per sample,
-with the FORMAT fields of the sample and whether it carries the ALT allele.
+or per haplotype of a sample, with the FORMAT fields of the sample and whether
+it carries the ALT allele.
 Both need the ``ranges`` extra (polars and polars-bio).
 """
 
@@ -143,6 +144,7 @@ def scan_vcf_genotypes(
     info_fields: Sequence[str] = (),
     sequence_alts_only: bool = True,
     carriers_only: bool = True,
+    haplotypes: bool = False,
 ) -> pl.LazyFrame:
     """Read the genotypes of a VCF file as a polars LazyFrame, with one row per ALT allele and sample.
 
@@ -154,6 +156,16 @@ def scan_vcf_genotypes(
     the ALT alleles ``A,<DEL>,C``, a sample with GT 0/3 carries C, and a
     sample with GT 0/2 carries none of the kept ALT alleles.
 
+    With ``haplotypes=True``, each allele of GT gives a row, with its
+    position in GT as haplotype: 0 or 1 for a diploid GT. carrier then
+    tells whether this haplotype carries the ALT allele. So GT 0|1 gives a
+    row for haplotype 0 that does not carry the ALT allele, and a row for
+    haplotype 1 that carries it. haplotype ignores the phasing, as
+    ``bcftools consensus -H`` does: for an unphased GT such as 0/1, the
+    order of the alleles in GT sets the haplotype.
+    ``~pl.col("GT").str.contains("/")`` keeps the phased and haploid GTs.
+    A missing GT gives one row with a null haplotype.
+
     :param path: path of the VCF file.
     :param samples: names of the samples to read. The default reads all samples.
     :param format_fields: FORMAT fields to read. GT is always read.
@@ -162,7 +174,10 @@ def scan_vcf_genotypes(
         bases, as in :func:`scan_vcf_variants`. With False, a sample with GT
         0/2 for the ALT alleles ``A,<DEL>,C`` carries ``<DEL>``.
     :param carriers_only: keep only the rows where the sample carries the ALT allele.
-    :returns: LazyFrame with the columns of :func:`scan_vcf_variants`, then sample, GT,
+        With ``haplotypes=True``, keep only the haplotypes that carry it.
+    :param haplotypes: give one row per ALT allele, sample and haplotype, as described above.
+    :returns: LazyFrame with the columns of :func:`scan_vcf_variants`, then sample,
+        haplotype (only with ``haplotypes=True``), GT,
         the other FORMAT fields with the value of the sample, and carrier.
         FORMAT fields with several values per sample, such as AD, are lists.
     :raises TypeError: if ``samples``, ``format_fields`` or ``info_fields`` is not
@@ -194,7 +209,20 @@ def scan_vcf_genotypes(
         # for a single-sample VCF, polars-bio returns the FORMAT fields as columns
         columns = [c for c in columns if c not in fields]
         genotypes = variants.with_columns(sample=pl.lit(sample_names[0]))
-    alleles = pl.col("GT").str.extract_all(r"\d+")
-    carrier = alleles.list.contains(pl.col("allele_idx").cast(pl.String)).fill_null(False)
-    genotypes = genotypes.select(*columns, "sample", *fields, carrier.alias("carrier"))
+    allele_idx = pl.col("allele_idx").cast(pl.String)
+    if haplotypes:
+        # the missing alleles (.) give a row too, so that haplotype is the position of the allele in GT
+        alleles = pl.col("GT").str.extract_all(r"\d+|\.")
+        # carrier holds the allele of the haplotype until the select compares it with allele_idx
+        genotypes = genotypes.with_columns(carrier=alleles, haplotype=pl.int_ranges(alleles.list.len())).explode(
+            "carrier", "haplotype", empty_as_null=False
+        )
+        carrier = pl.col("carrier") == allele_idx
+        haplotype_columns = ["haplotype"]
+    else:
+        carrier = pl.col("GT").str.extract_all(r"\d+").list.contains(allele_idx)
+        haplotype_columns = []
+    genotypes = genotypes.select(
+        *columns, "sample", *haplotype_columns, *fields, carrier.fill_null(False).alias("carrier")
+    )
     return genotypes.filter("carrier") if carriers_only else genotypes

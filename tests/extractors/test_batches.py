@@ -145,6 +145,36 @@ def test_iter_variant_seqs_equals_fasta_extract(alt_kinds_vcf, use_strand, ancho
             assert row["ref_seq"] == fasta.extract(interval)
 
 
+def test_iter_variant_seqs_haplotypes(tmp_path):
+    # S1 carries the first variant on haplotype 1 and the other two on haplotype 0. S3 carries none.
+    records = [
+        (variant("chr1", 12, 1, "N"), "0|1", "1|1", "0|0"),
+        (variant("chr1", 20, 1, "{first}GAT"), "1|0", "0|0", "0|0"),
+        (variant("chr1", 25, 3, "{first}"), "1|0", "0|0", "0|0"),
+    ]
+    header = [
+        "##fileformat=VCFv4.2",
+        "##contig=<ID=chr1,length=200>",
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\tS2\tS3",
+    ]
+    lines = ["\t".join(["chr1", str(v.pos), ".", v.ref, v.alt, ".", ".", ".", "GT", *gts]) for v, *gts in records]
+    vcf = tmp_path / "haplotypes.vcf"
+    vcf.write_text("\n".join(header + lines) + "\n")
+    intervals = pl.DataFrame({"chrom": ["chr1"], "start": [10], "end": [40], "strand": ["+"]})
+    pairs = scan_variant_pairs(intervals, scan_vcf_genotypes(str(vcf), haplotypes=True))
+    reference = SeqReference()
+    group_by = ["interval_idx", "variant_sample", "variant_haplotype"]
+    out = collect(iter_variant_seqs(pairs, reference, use_strand=True, group_by=group_by))
+    # the haplotypes without variants in the interval, e.g. those of S3, give no row
+    assert out.select("variant_sample", "variant_haplotype").rows() == [("S1", 0), ("S1", 1), ("S2", 0), ("S2", 1)]
+    v1, v2, v3 = (v for v, *_ in records)
+    interval = Interval("chr1", 10, 40, strand="+")
+    extractor = VariantSeqExtractor(reference, use_strand=True)
+    expected = [extractor.extract(interval, vs, anchor_pos=interval.center()) for vs in [[v2, v3], [v1], [v1], [v1]]]
+    assert out["alt_seq"].to_list() == expected
+
+
 @pytest.mark.parametrize(
     "anchor, use_strand, alt_seq",
     [

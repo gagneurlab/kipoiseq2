@@ -59,6 +59,9 @@ def iter_variant_seqs(
     All rows of a group must have the same interval, and the variants of a group must not overlap.
     The default ``group_by`` gives one row per pair, e.g. for variant effect predictions.
     ``group_by=["interval_idx"]`` applies all variants of an interval together.
+    For the haplotypes of the samples, pass ``scan_vcf_genotypes(path, haplotypes=True)`` as the variants of
+    :func:`~kipoiseq2.extractors.vcf_matching.scan_variant_pairs`,
+    and group by ``["interval_idx", "variant_sample", "variant_haplotype"]``.
     An interval without variants has no pairs, so it gives no row.
     Each pair applies its ALT allele, so ``pairs`` must not contain samples that do not carry it.
     For the genotypes of :func:`~kipoiseq2.extractors.vcf.scan_vcf_genotypes`, keep ``carriers_only=True``:
