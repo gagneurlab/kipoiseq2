@@ -119,7 +119,7 @@ def _center(start: int, end: int, *, reverse: bool) -> int:
     return (start + end) // 2 if reverse else (start + end + 1) // 2
 
 
-def _resize_bounds(start: int, end: int, width: int, anchor: str, *, reverse: bool) -> tuple[int, int]:
+def _resize_bounds(start: int, end: int, width: int, anchor: _Anchor, *, reverse: bool) -> tuple[int, int]:
     """Return the start and end of the range from ``start`` to ``end``, resized like :meth:`Interval.resize`.
 
     :param reverse: if True, resize like a "-" interval, and if False, like a "+" interval
