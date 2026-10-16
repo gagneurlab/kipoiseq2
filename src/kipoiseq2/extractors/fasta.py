@@ -1,7 +1,8 @@
 import os
+from types import TracebackType
+from typing import Self
 
-from kipoiseq2 import Interval
-from kipoiseq2.extractors import BaseExtractor
+from kipoiseq2.dataclasses import Interval
 
 __all__ = ["FastaStringExtractor"]
 
@@ -40,12 +41,14 @@ def _check_compression(fasta_file: str) -> None:
         ) from None
 
 
-class FastaStringExtractor(BaseExtractor):
+class FastaStringExtractor:
     """Fasta file extractor
 
     The file may be uncompressed or compressed with bgzip.
     Reading a bgzip file requires Biopython, which kipoiseq2 does not install.
     pyfaidx writes the index ``.fai`` next to the file if it is missing, and also ``.gzi`` for a bgzip file.
+
+    Close the file with :meth:`close`, or use the extractor as a context manager.
 
     .. note::
        The extractor is not thread-safe.
@@ -61,15 +64,25 @@ class FastaStringExtractor(BaseExtractor):
     :raises ValueError: if the file is compressed with gzip but not with bgzip,
         or if it is compressed with bgzip and its name does not end in ``.gz`` or ``.bgz``
     :raises ImportError: if the file is compressed with bgzip and Biopython is missing
+
+    Example:
+
+    >>> with FastaStringExtractor("genome.fa", use_strand=True) as fasta:  # doctest: +SKIP
+    ...     seq = fasta.extract(Interval("chr1", 10, 20, strand="-"))
     """
 
-    def __init__(self, fasta_file: str | os.PathLike[str], *, use_strand: bool, uppercase: bool = True):
+    def __init__(self, fasta_file: str | os.PathLike[str], *, use_strand: bool, uppercase: bool = True) -> None:
         from pyfaidx import Fasta
 
         self.fasta_file = os.fspath(fasta_file)
         _check_compression(self.fasta_file)
         self._use_strand = use_strand
         self.fasta = Fasta(self.fasta_file, sequence_always_upper=uppercase)
+
+    @property
+    def use_strand(self) -> bool:
+        """If True, :meth:`extract` reverse complements the sequence of a "-" interval."""
+        return self._use_strand
 
     def extract(self, interval: Interval, use_strand: bool | None = None) -> str:
         """
@@ -89,10 +102,20 @@ class FastaStringExtractor(BaseExtractor):
         # pyfaidx wants a 1-based interval
         return str(self.fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
 
-    def close(self):
-        # self.fasta is missing if __init__ failed, e.g. for a missing file
-        if hasattr(self, "fasta"):
-            return self.fasta.close()
+    def close(self) -> None:
+        """Close the FASTA file. Closing twice does not raise."""
+        self.fasta.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
 
 
 # class BigWigExtractor(BaseExtractor):

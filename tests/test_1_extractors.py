@@ -1,4 +1,3 @@
-import gc
 import gzip
 import struct
 import sys
@@ -7,7 +6,7 @@ import zlib
 import pytest
 
 from kipoiseq2.dataclasses import Interval
-from kipoiseq2.extractors import BaseExtractor, FastaStringExtractor
+from kipoiseq2.extractors import FastaStringExtractor, SequenceExtractor
 
 comp = {"A": "T", "C": "G", "G": "C", "T": "A"}
 comp.update({k.lower(): v.lower() for k, v in comp.items()})
@@ -45,24 +44,23 @@ def test_fasta_extractor_uppercases_by_default(tmp_path):
         FastaStringExtractor(fasta_file, True, False)
 
 
-def test_base_extractor_extract_is_abstract():
-    class NoExtract(BaseExtractor):
-        pass
-
-    with pytest.raises(TypeError, match="extract"):
-        BaseExtractor()
-    with pytest.raises(TypeError, match="extract"):
-        NoExtract()
+def test_fasta_extractor_is_a_sequence_extractor():
+    with FastaStringExtractor("tests/data/sample.fasta", use_strand=False) as fasta:
+        assert isinstance(fasta, SequenceExtractor)
 
 
-def test_fasta_extractor_missing_file(monkeypatch):
-    unraisable = []
-    monkeypatch.setattr(sys, "unraisablehook", unraisable.append)
-    with pytest.raises(OSError):
+def test_fasta_extractor_missing_file():
+    with pytest.raises(FileNotFoundError):
         FastaStringExtractor("tests/data/missing.fa", use_strand=False)
-    gc.collect()
-    # __del__ calls close() on the half-initialized extractor
-    assert unraisable == []
+
+
+def test_fasta_extractor_context_manager():
+    with FastaStringExtractor("tests/data/sample.fasta", use_strand=False) as fasta:
+        assert fasta.use_strand is False
+    with pytest.raises(ValueError, match="closed file"):
+        fasta.extract(Interval("chr1", 0, 2))
+    # closing twice does not raise
+    fasta.close()
 
 
 def test_fasta_extractor_requires_use_strand_keyword():

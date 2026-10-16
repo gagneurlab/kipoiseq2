@@ -37,8 +37,11 @@ encoded = Encoder().one_hot(seq)  # uint8 array of shape (10, 4)
 # sequence with variants applied, anchored at the interval start
 variants = [Variant("chr1", 15, "A", "T")]
 # for the variants of a VCF file in each interval, see MultiVariantsMatcher below
-alt_seq = VariantSeqExtractor("genome.fa", use_strand=True).extract(interval, variants, anchor=10)
+alt_seq = VariantSeqExtractor(fasta, use_strand=True).extract(interval, variants, anchor=10)
 ```
+
+`VariantSeqExtractor` reads the reference sequence from `fasta`, or from any object with the methods of `SequenceExtractor`.
+Close the FASTA file with `fasta.close()`, or open it in a `with` block.
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
 `Interval` is immutable: methods such as `resize`, `shift` and `slop` return a new interval.

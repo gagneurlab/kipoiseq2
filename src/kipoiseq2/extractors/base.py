@@ -1,29 +1,22 @@
-import abc
-import logging
+from typing import Protocol, runtime_checkable
 
-from kipoiseq2 import Interval
+from kipoiseq2.dataclasses import Interval
 
-log = logging.getLogger(__name__)
-
-__all__ = ["BaseExtractor"]
+__all__ = ["SequenceExtractor"]
 
 
-class BaseExtractor(abc.ABC):
-    _use_strand: bool
+@runtime_checkable
+class SequenceExtractor(Protocol):
+    """Source of a reference sequence, e.g. a :class:`~kipoiseq2.extractors.FastaStringExtractor`.
 
-    # main method
-    @abc.abstractmethod
-    def extract(self, interval: Interval, *args, **kwargs) -> str:
-        raise NotImplementedError
+    :class:`~kipoiseq2.extractors.VariantSeqExtractor` reads the reference from it.
+    Any object with these members fits, without subclassing.
+    """
 
-    @property
-    def use_strand(self):
-        return self._use_strand
+    def extract(self, interval: Interval) -> str:
+        """Return the sequence of ``interval``.
 
-    # closing files
-    def __del__(self):
-        return self.close()
-
-    def close(self):
-        # implemented by the subclass
-        pass
+        :param interval: the interval. For the strand ``"."``, the sequence must be the "+" strand.
+        :returns: the sequence, of ``interval.width`` letters
+        """
+        ...

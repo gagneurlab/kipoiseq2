@@ -1,9 +1,9 @@
 import math
-import warnings
-from typing import Iterable, Optional
+from collections.abc import Iterable
+from typing import Optional
 
 from kipoiseq2.dataclasses import Interval, Variant
-from kipoiseq2.extractors import BaseExtractor, FastaStringExtractor
+from kipoiseq2.extractors.base import SequenceExtractor
 
 __all__ = ["VariantSeqExtractor"]
 
@@ -40,50 +40,33 @@ Overlapping variants can give a range whose ``start`` is greater than its ``end`
 """
 
 
-class VariantSeqExtractor(BaseExtractor):
+class VariantSeqExtractor:
+    """Extractor of sequences with variants applied.
+
+    :param reference: the extractor of the reference sequence, e.g. a
+        :class:`~kipoiseq2.extractors.FastaStringExtractor`.
+        :meth:`extract` passes it intervals with the strand ``"."``, so it returns the "+" strand
+        also with ``use_strand=True``. VariantSeqExtractor does not close it.
+    :param use_strand: if True, :meth:`extract` reverse complements the sequence of a "-" interval
+    :raises TypeError: if ``reference`` is not a :class:`~kipoiseq2.extractors.base.SequenceExtractor`
+
+    Example:
+
+    >>> with FastaStringExtractor("genome.fa", use_strand=False) as fasta:  # doctest: +SKIP
+    ...     extractor = VariantSeqExtractor(fasta, use_strand=True)
+    ...     seq = extractor.extract(interval, variants, anchor=interval.start)
     """
-    Sequence extractor which allows to obtain the alternative sequence,
-    given some interval and variants inside this interval.
 
-    :param fasta_file: path to the FASTA file, see :class:`~kipoiseq2.extractors.FastaStringExtractor`
-    :param reference_sequence: extractor returning the reference sequence given some interval
-    :param use_strand: if True, the extracted sequence
-        is reverse complemented in case interval.strand == "-"
-    :raises ValueError: if both or none of ``fasta_file`` and ``reference_sequence`` are given
-    """
-
-    _ref_seq_extractor: BaseExtractor
-
-    def __init__(
-        self,
-        fasta_file: Optional[str] = None,
-        reference_sequence: Optional[BaseExtractor] = None,
-        *,
-        use_strand: bool,
-    ):
+    def __init__(self, reference: SequenceExtractor, *, use_strand: bool) -> None:
+        if not isinstance(reference, SequenceExtractor):
+            raise TypeError(f"reference must be a SequenceExtractor, not {type(reference).__name__}")
+        self._reference = reference
         self._use_strand = use_strand
 
-        if fasta_file is not None:
-            if reference_sequence is not None:
-                raise ValueError("Give exactly one of `fasta_file` and `reference_sequence`")
-            self._ref_seq_extractor = FastaStringExtractor(fasta_file, use_strand=False)
-        else:
-            if reference_sequence is None:
-                raise ValueError("Give exactly one of `fasta_file` and `reference_sequence`")
-            self._ref_seq_extractor = reference_sequence
-
     @property
-    def fasta(self):
-        """Deprecated alias of :attr:`ref_seq_extractor`."""
-        warnings.warn("`fasta` is deprecated, use `ref_seq_extractor` instead", DeprecationWarning, stacklevel=2)
-        return self._ref_seq_extractor
-
-    @property
-    def ref_seq_extractor(self) -> BaseExtractor:
-        """
-        :returns: The reference sequence extractor of this object
-        """
-        return self._ref_seq_extractor
+    def use_strand(self) -> bool:
+        """If True, :meth:`extract` reverse complements the sequence of a "-" interval."""
+        return self._use_strand
 
     def extract(
         self,
@@ -157,7 +140,7 @@ class VariantSeqExtractor(BaseExtractor):
         right_pieces.append((prev, iend))
 
         # fetch the reference, ignoring the strand
-        ref_seq = self.ref_seq_extractor.extract(Interval(interval.chrom, istart, iend))
+        ref_seq = self._reference.extract(Interval(interval.chrom, istart, iend))
         down_str = self._join(left_pieces, ref_seq, istart, iend)
         up_str = self._join(right_pieces, ref_seq, istart, iend)
 

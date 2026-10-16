@@ -19,28 +19,53 @@ def test_reverse_complement():
 
 @pytest.fixture
 def variant_seq_extractor():
-    return VariantSeqExtractor(fasta_file, use_strand=True)
+    with FastaStringExtractor(fasta_file, use_strand=False) as fasta:
+        yield VariantSeqExtractor(fasta, use_strand=True)
 
 
-def test_variant_seq_extractor_reference_arguments():
-    with pytest.raises(ValueError, match="exactly one of `fasta_file` and `reference_sequence`"):
-        VariantSeqExtractor(use_strand=True)
-    with pytest.raises(ValueError, match="exactly one of `fasta_file` and `reference_sequence`"):
-        VariantSeqExtractor(
-            fasta_file, reference_sequence=FastaStringExtractor(fasta_file, use_strand=False), use_strand=True
-        )
+def test_variant_seq_extractor_rejects_other_references():
+    # a path is no SequenceExtractor: pass a FastaStringExtractor
+    with pytest.raises(TypeError, match="^reference must be a SequenceExtractor, not str$"):
+        VariantSeqExtractor(fasta_file, use_strand=True)
+
+
+def test_variant_seq_extractor_takes_any_sequence_extractor():
+    class Reference:
+        def extract(self, interval):
+            return "ACGTA"[interval.start : interval.end]
+
+    extractor = VariantSeqExtractor(Reference(), use_strand=True)
+    assert extractor.extract(Interval("chr1", 0, 5), [Variant("chr1", 2, "C", "T")], anchor=0) == "ATGTA"
 
 
 def test_variant_seq_extractor_requires_use_strand_keyword():
+    reference = FastaStringExtractor(fasta_file, use_strand=False)
     with pytest.raises(TypeError, match="use_strand"):
-        VariantSeqExtractor(fasta_file)
+        VariantSeqExtractor(reference)
     with pytest.raises(TypeError, match="positional"):
-        VariantSeqExtractor(fasta_file, None, True)
+        VariantSeqExtractor(reference, True)
+    reference.close()
 
 
 def test_variant_seq_extractor_extract_rejects_unknown_arguments(variant_seq_extractor):
     with pytest.raises(TypeError, match="fixed_length"):
         variant_seq_extractor.extract(Interval("chr1", 0, 3), [], anchor=0, fixed_length=False)
+
+
+@pytest.mark.parametrize("strand", ["+", "-", "."])
+def test_variant_seq_extractor_reference_with_use_strand(variant_seq_extractor, strand):
+    # the reference gets intervals with the strand ".", so a reference with use_strand=True
+    # does not reverse complement the sequence a second time
+    variants = [Variant("chr1", 4, "T", "C"), Variant("chr1", 5, "A", "GA")]
+    interval = Interval("chr1", 2, 9, strand=strand)
+    expected = variant_seq_extractor.extract(interval, variants, anchor=5)
+    assert expected == ("ACGTTCG" if strand == "-" else "CGAACGT")
+    with FastaStringExtractor(fasta_file, use_strand=True) as reference:
+        extractor = VariantSeqExtractor(reference, use_strand=True)
+        assert extractor.extract(interval, variants, anchor=5) == expected
+        assert extractor.extract(interval, variants, anchor=5, fixed_len=False) == variant_seq_extractor.extract(
+            interval, variants, anchor=5, fixed_len=False
+        )
 
 
 def test_split():
@@ -116,13 +141,6 @@ def test_extract(variant_seq_extractor):
 
     interval = Interval("chr1", 0, 3, strand="+")
     seq = variant_seq_extractor.extract(interval, variants, anchor=10, fixed_len=False)
-    assert seq == "ACG"
-
-    interval = Interval("chr1", 0, 3, strand="+")
-    ref_seq_extractor = FastaStringExtractor(fasta_file, use_strand=True)
-    seq = VariantSeqExtractor(reference_sequence=ref_seq_extractor, use_strand=True).extract(
-        interval, variants, anchor=10, fixed_len=False
-    )
     assert seq == "ACG"
 
 

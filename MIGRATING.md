@@ -181,6 +181,14 @@ The matchers use polars instead of pyranges:
   To keep the old behavior, pass `use_strand=False` to `FastaStringExtractor` and `use_strand=True` to `VariantSeqExtractor`.
 - `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` raise a TypeError for unknown arguments.
   In 0.1, they ignored them, so a typo like `fixed_length=False` had no effect.
+- `VariantSeqExtractor(reference, *, use_strand)` takes the reference extractor as its first argument, instead of `fasta_file` or `reference_sequence`.
+  `VariantSeqExtractor(fasta_file=path, use_strand=True)` becomes `VariantSeqExtractor(FastaStringExtractor(path, use_strand=False), use_strand=True)`,
+  and `VariantSeqExtractor(reference_sequence=extractor, use_strand=True)` becomes `VariantSeqExtractor(extractor, use_strand=True)`.
+  It raises a TypeError if `reference` has no method `extract`.
+- `BaseExtractor` is gone. A reference extractor needs no base class: any object with the methods of the protocol `SequenceExtractor` fits.
+- `VariantSeqExtractor.ref_seq_extractor` and its deprecated alias `fasta` are gone. Keep the reference extractor that you pass instead.
+- `FastaStringExtractor` is a context manager, which closes the FASTA file at the end of a `with` block.
+  `VariantSeqExtractor` opens no file, so it has no `close()`. You close the reference that you pass yourself.
 - `FastaStringExtractor` raises a ValueError for a FASTA file that is compressed with gzip instead of bgzip, and an ImportError for a bgzip file if Biopython is missing.
   In 0.1, pyfaidx raised an ImportError about Biopython for a gzip file whose name ends in `.gz`, and a UnicodeDecodeError for other gzip files.
 - `force_upper` of `FastaStringExtractor` is now `uppercase=True` by default, so the extracted sequences are uppercase.
