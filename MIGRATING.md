@@ -217,6 +217,8 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - `VariantSeqExtractor.extract` checks the variants. It raises a ValueError for a variant on another chromosome than `interval`, for a variant outside the chromosome, and for a variant whose REF differs from the reference, ignoring case.
   In 0.1, it replaced the reference bases at the position of such a variant with its ALT.
   It raises a TypeError if `interval` is not an `Interval` or a variant is not a `Variant`.
+- `VariantSeqExtractor.extract` raises a ValueError for two variants that overlap, i.e. whose REF share a base, e.g. two ALT alleles of one VCF record.
+  In 0.1, it applied both: two SNVs at one base gave two bases, in the order of the variants.
 - `VariantSeqExtractor.extract(interval, variants, *, anchor_pos=None, pad_with_n=False)` takes its options only as keywords.
   `anchor` and `fixed_len` become `anchor_pos`: `anchor=a` becomes `anchor_pos=a`, and `anchor=a, fixed_len=False` becomes `anchor_pos=None`.
   `is_padding` is renamed to `pad_with_n`.
