@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from kipoiseq2.dataclasses import Interval
-from kipoiseq2.transforms.functional import TRANSLATION_TABLE, fixed_len, pad, reverse_complement, translate, trim
+from kipoiseq2.transforms import TRANSLATION_TABLE, fixed_len, pad, reverse_complement, translate, trim
 
 
 def test_trim():

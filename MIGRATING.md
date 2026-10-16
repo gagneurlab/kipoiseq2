@@ -175,7 +175,7 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   In 0.1, a negative `width` gave an interval with `start` greater than `end`, and `width=None` a copy.
 - `Interval.slop` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
   "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.
-- `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms.functional` trims a sequence to a length.
+- `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms` trims a sequence to a length.
   `use_strand` is keyword-only. `slice` raises a ValueError unless `0 <= i < j <= interval.width`.
   In 0.1, `trim` raised an AssertionError if `j <= i`, and returned a longer interval if `j > interval.width`.
 - `pad`, `trim` and `fixed_len` take only a str as `seq` and as `value`. In 0.1, they also took lists.
@@ -224,7 +224,7 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   In 0.1, it moved an anchor outside the interval to the nearest end of the interval.
 - `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` no longer take `use_strand`.
   Create the extractor with the `use_strand` you need instead.
-- `rc_dna(seq)` becomes `reverse_complement(seq)` from `kipoiseq2.transforms.functional`.
+- `rc_dna(seq)` becomes `reverse_complement(seq)` from `kipoiseq2.transforms`.
   `reverse_complement` also takes the IUPAC codes, e.g. N, and raises ValueError instead of KeyError for other characters.
 - `rc_rna(seq)` is gone. For an RNA sequence in upper case, use `reverse_complement(seq.replace("U", "T")).replace("T", "U")`.
 - `kipoiseq2.utils.parse_dtype` is gone, because it called `eval()` on strings, and only `ReorderedOneHot` used it.
@@ -282,3 +282,5 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   - `ResizeInterval(width, anchor)(interval)` becomes `interval.resize(width, anchor=anchor)`.
     For the 0.1 behavior of the anchors `"start"` and `"end"`, pass `use_strand=False`, as for `resize_interval`.
   - `Compose([f, g])` becomes a function that calls the steps in order, e.g. `lambda x: g(f(x))`.
+- The functions and constants of `kipoiseq2.transforms.functional` moved to the module `kipoiseq2.transforms`, and `kipoiseq2.transforms.functional` is gone.
+  For example, `from kipoiseq2.transforms.functional import translate` becomes `from kipoiseq2.transforms import translate`.

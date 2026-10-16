@@ -9,7 +9,7 @@ api/dataclasses
 api/extractors
 api/alphabets
 api/encoders
-api/functional
+api/transforms
 ```
 
 ```{toctree}
