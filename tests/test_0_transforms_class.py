@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import kipoiseq2.transforms
-from kipoiseq2.transforms.transforms import Compose, OneHot, ReorderedOneHot, SplitSplicingSeq
+from kipoiseq2.transforms.transforms import Compose, OneHot, SplitSplicingSeq
 
 
 # --------------------------------------------
@@ -14,37 +14,28 @@ def test_compose():
     assert c("ACGT").shape == (4, 4)
 
 
-def test_ReorderedOneHot():
-    seqlen = 10
-    seq = "A" * seqlen
-
-    test_pairs = [
-        ((list("ACGT"), 1, None), (10, 4)),
-        ((list("ACGT"), 2, 1), (10, 1, 4)),
-        ((list("ACGTD"), 2, 1), (10, 1, 5)),
-        ((list("ACGT"), 0, None), (4, 10)),
-        ((list("ACGT"), 0, 1), (4, 1, 10)),
-        ((list("ACGT"), 0, 2), (4, 10, 1)),
-    ]
-
-    for args, result in test_pairs:
-        tr = ReorderedOneHot(alphabet=args[0], alphabet_axis=args[1], dummy_axis=args[2])
-        out = tr(seq)
-        assert out.shape == tr.get_output_shape(seqlen)
-        assert out.shape == result
-
-    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
-        ReorderedOneHot(alphabet_axis=1, dummy_axis=1)
-
-    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
-        ReorderedOneHot(dummy_axis=1)
-
-
-@pytest.mark.parametrize("alphabet_axis, dummy_axis", [(-1, None), (2, None), (3, 1), (-1, 2)])
-def test_ReorderedOneHot_invalid_alphabet_axis(alphabet_axis, dummy_axis):
-    expected = f"alphabet_axis can be 0 or 1, or 2 if dummy_axis is given, got {alphabet_axis}"
-    with pytest.raises(ValueError, match=f"^{re.escape(expected)}$"):
-        ReorderedOneHot(alphabet_axis=alphabet_axis, dummy_axis=dummy_axis)
+# the layouts of the former ReorderedOneHot(alphabet_axis=..., dummy_axis=...) for a sequence of length 10
+@pytest.mark.parametrize(
+    "dummy_axis, swap, shape",
+    [
+        (None, None, (10, 4)),  # alphabet_axis=1
+        (None, (0, 1), (4, 10)),  # alphabet_axis=0
+        (0, None, (1, 10, 4)),  # alphabet_axis=2, dummy_axis=0
+        (1, None, (10, 1, 4)),  # alphabet_axis=2, dummy_axis=1
+        (2, None, (10, 4, 1)),  # alphabet_axis=1, dummy_axis=2
+        (0, (2, 1), (1, 4, 10)),  # alphabet_axis=1, dummy_axis=0
+        (1, (0, 2), (4, 1, 10)),  # alphabet_axis=0, dummy_axis=1
+        (2, (1, 0), (4, 10, 1)),  # alphabet_axis=0, dummy_axis=2
+    ],
+)
+def test_OneHot_axes(dummy_axis, swap, shape):
+    x = OneHot()("ACGTNACGTA")
+    out = x if dummy_axis is None else np.expand_dims(x, dummy_axis)
+    out = out if swap is None else np.swapaxes(out, *swap)
+    assert out.shape == shape
+    # the alphabet axis holds the one-hot vectors
+    alphabet_axis = shape.index(4)
+    assert np.array_equal(np.moveaxis(out, alphabet_axis, -1).reshape(10, 4), x)
 
 
 # OneHot() encodes with one_hot_dna. OneHot(alphabet=list("ACGT")) encodes with one_hot,
@@ -66,34 +57,23 @@ def test_OneHot_paths_agree_unknown_letters(seq):
         OneHot()(seq)
 
 
-@pytest.mark.parametrize("alphabet", [list("ACGT"), ("A", "C", "G", "T")])
-def test_ReorderedOneHot_ignores_case(alphabet):
-    tr = ReorderedOneHot(alphabet=alphabet, alphabet_axis=0)
-    assert np.array_equal(tr("acgtn"), tr("ACGTN"))
-    with pytest.raises(ValueError, match="X"):
-        tr("ACGTX")
-
-
-@pytest.mark.parametrize("transform", [OneHot, ReorderedOneHot])
 @pytest.mark.parametrize("name, value", [("alphabet", "ACGT"), ("neutral_alphabet", "N"), ("neutral_alphabet", "NRY")])
-def test_OneHot_alphabet_str(transform, name, value):
+def test_OneHot_alphabet_str(name, value):
     expected = f"{name} must be a list or tuple of strings, not a str: "
     expected += f"pass a list of letters, e.g. list({value!r}) or [{value!r}]"
     with pytest.raises(TypeError, match=f"^{re.escape(expected)}$"):
-        transform(**{name: value})
+        OneHot(**{name: value})
 
 
-@pytest.mark.parametrize("transform", [OneHot, ReorderedOneHot])
 @pytest.mark.parametrize("name, value", [("alphabet", ["A", "C", "G", 1]), ("neutral_alphabet", [None])])
-def test_OneHot_alphabet_not_strings(transform, name, value):
+def test_OneHot_alphabet_not_strings(name, value):
     with pytest.raises(TypeError, match=f"^{name} must be a list or tuple of strings"):
-        transform(**{name: value})
+        OneHot(**{name: value})
 
 
-@pytest.mark.parametrize("transform", [OneHot, ReorderedOneHot])
-def test_OneHot_letters_of_different_lengths(transform):
+def test_OneHot_letters_of_different_lengths():
     with pytest.raises(ValueError, match="^all letters of alphabet and neutral_alphabet must have the same length"):
-        transform(neutral_alphabet=["NRY"])("ACGT")
+        OneHot(neutral_alphabet=["NRY"])("ACGT")
 
 
 def test_OneHot_letters_with_several_characters():
@@ -152,6 +132,5 @@ def test_transforms_namespace():
         "SwapAxes",
         "ResizeInterval",
         "OneHot",
-        "ReorderedOneHot",
         "SplitSplicingSeq",
     }

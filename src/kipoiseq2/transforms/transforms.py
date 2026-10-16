@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 
 from kipoiseq2.transforms import functional as F
-from kipoiseq2.utils import DNA, parse_dtype
+from kipoiseq2.utils import DNA
 
 __all__ = [
     "Compose",
@@ -11,7 +11,6 @@ __all__ = [
     "SwapAxes",
     "ResizeInterval",
     "OneHot",
-    "ReorderedOneHot",
     "SplitSplicingSeq",
 ]
 
@@ -135,110 +134,6 @@ class OneHot:
                 neutral_value=self.neutral_value,
                 dtype=self.dtype,
             )
-
-
-class ReorderedOneHot:
-    """Flexible one-hot encoding class that can account for
-    many different one-hot encoding formats.
-
-    It encodes the letters like :class:`OneHot`.
-
-    :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-        A list or tuple of letters, e.g. ``list("ACGT")`` or ``["A", "C", "G", "T"]``
-    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column, as a list or tuple
-    :param neutral_value: value of the neutral element
-    :param dtype: defines the numpy dtype of the returned array.
-    :param alphabet_axis: axis along which the alphabet runs (e.g. A,C,G,T for DNA)
-    :param dummy_axis: defines in which dimension a dummy axis should be added. None if no dummy axis is required.
-    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
-    :raises ValueError: if ``dummy_axis`` equals ``alphabet_axis`` or is not 0, 1 or 2,
-        or if ``alphabet_axis`` is not 0 or 1, or 2 with a ``dummy_axis``
-
-    Examples (``None`` = sequence axis):
-
-    - ``(None, 4)``: default
-    - ``(4, None)``: ``alphabet_axis=0``
-    - ``(4, 1, None)``: ``alphabet_axis=0, dummy_axis=1``
-    """
-
-    def __init__(
-        self, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtype=None, alphabet_axis=1, dummy_axis=None
-    ):
-        # make sure the alphabet axis and the dummy axis are valid:
-        if dummy_axis is not None:
-            if alphabet_axis == dummy_axis:
-                raise ValueError("dummy_axis can't be the same as alphabet_axis")
-            if not (dummy_axis >= 0 and dummy_axis <= 2):
-                raise ValueError("dummy_axis can be either 0,1 or 2")
-        if not (0 <= alphabet_axis < 2 or (alphabet_axis == 2 and dummy_axis is not None)):
-            raise ValueError(f"alphabet_axis can be 0 or 1, or 2 if dummy_axis is given, got {alphabet_axis!r}")
-
-        self.alphabet_axis = alphabet_axis
-        self.dummy_axis = dummy_axis
-        self.alphabet = alphabet
-        self.dtype = parse_dtype(dtype)
-        self.neutral_alphabet = neutral_alphabet
-        self.neutral_value = neutral_value
-
-        # set the transform parameters correctly
-        if dummy_axis is not None and dummy_axis < 2:
-            # dummy axis is added somewhere in the middle, so the alphabet axis is at the end now
-            existing_alphabet_axis = 2
-        else:
-            # alphabet axis stayed the same
-            existing_alphabet_axis = 1
-
-        # check if no swapping needed
-        if existing_alphabet_axis == self.alphabet_axis:
-            self.alphabet_axis = None
-
-        # how to transform the input
-        self.transform = Compose(
-            [
-                OneHot(
-                    self.alphabet,
-                    neutral_alphabet=self.neutral_alphabet,
-                    neutral_value=self.neutral_value,
-                    dtype=self.dtype,
-                ),  # one-hot-encode
-                DummyAxis(self.dummy_axis),  # optionally inject the dummy axis
-                # put the alphabet axis elsewhere
-                SwapAxes(existing_alphabet_axis, self.alphabet_axis),
-            ]
-        )
-
-    def __call__(self, seq):
-        return self.transform(seq)
-
-    def get_output_shape(self, seqlen=None):
-        """Compute the output shape"""
-        if self.dummy_axis is not None and self.alphabet_axis == self.dummy_axis:
-            raise ValueError("dummy_axis can't be the same as alphabet_axis")
-
-        # default
-        output_shape = (seqlen, len(self.alphabet))
-        alphabet_axis = self.alphabet_axis
-
-        if self.dummy_axis is not None and self.dummy_axis < 2:
-            # dummy axis is added somewhere in the middle, so the alphabet axis is at the end now
-            existing_alphabet_axis = 2
-        else:
-            existing_alphabet_axis = 1
-
-        if existing_alphabet_axis == alphabet_axis:
-            alphabet_axis = None
-
-        # inject the dummy axis
-        if self.dummy_axis is not None:
-            output_shape = output_shape[: self.dummy_axis] + (1,) + output_shape[self.dummy_axis :]
-
-        # swap axes
-        if alphabet_axis is not None:
-            sh = list(output_shape)
-            sh[alphabet_axis], sh[existing_alphabet_axis] = sh[existing_alphabet_axis], sh[alphabet_axis]
-            output_shape = tuple(sh)
-
-        return output_shape
 
 
 # Splicing

@@ -44,16 +44,19 @@ The matchers use polars instead of pyranges:
 
 ## Breaking changes in 0.2
 
-- `one_hot_dna`, `one_hot`, `tokenize`, `OneHot` and `ReorderedOneHot` ignore case: a lowercase letter, e.g. of a soft-masked repeat, encodes like its uppercase form.
+- `one_hot_dna`, `one_hot`, `tokenize` and `OneHot` ignore case: a lowercase letter, e.g. of a soft-masked repeat, encodes like its uppercase form.
 - They raise a ValueError that names the letters of the sequence that are in neither `alphabet` nor `neutral_alphabet`, e.g. IUPAC codes such as `R` or `Y`.
   To encode IUPAC codes like `N`, add them to `neutral_alphabet`, e.g. `one_hot_dna(seq, neutral_alphabet=list("NRYSWKMBDHV"))`.
 - They raise a ValueError if two letters of `alphabet` and `neutral_alphabet` differ only in case but encode differently, e.g. for `alphabet=list("ACGTacgt")`.
 - In kipoiseq and kipoiseq2 0.1, `one_hot_dna` encoded lowercase and unknown letters as rows of zeros.
-  `OneHot` and `ReorderedOneHot` did the same with the default `alphabet`, `neutral_alphabet` and `neutral_value`.
+  `OneHot` did the same with the default `alphabet`, `neutral_alphabet` and `neutral_value`.
   Otherwise they raised a KeyError, as did `one_hot` and `tokenize`.
-- `one_hot_dna`, `one_hot`, `tokenize`, `one_hot2string`, `OneHot` and `ReorderedOneHot` take `alphabet` and `neutral_alphabet` only as a list or tuple of strings, and raise a TypeError for a str.
+- `one_hot_dna`, `one_hot`, `tokenize`, `one_hot2string` and `OneHot` take `alphabet` and `neutral_alphabet` only as a list or tuple of strings, and raise a TypeError for a str.
   A str was ambiguous: `one_hot_dna` read `neutral_alphabet="NRY"` as three letters, but the others read it as one letter of three characters.
   `alphabet="ACGT"` becomes `alphabet=list("ACGT")`, and `neutral_alphabet="N"` becomes `neutral_alphabet=["N"]`.
   `one_hot_dna` no longer splits the elements of `neutral_alphabet` into characters, so `neutral_alphabet=["NRY"]` raises a ValueError: pass `list("NRY")` instead.
-- `one_hot`, `tokenize`, `OneHot` and `ReorderedOneHot` raise a ValueError instead of an AssertionError if the letters of `alphabet` and `neutral_alphabet` differ in length, or if the length of `seq` is not a multiple of the letter length.
-  `ReorderedOneHot` also raises a ValueError instead of an AssertionError for an invalid `alphabet_axis`.
+- `one_hot`, `tokenize` and `OneHot` raise a ValueError instead of an AssertionError if the letters of `alphabet` and `neutral_alphabet` differ in length, or if the length of `seq` is not a multiple of the letter length.
+- `ReorderedOneHot` is gone. Reorder the axes of the `OneHot` array with numpy instead.
+  `OneHot()(seq)` returns an array of shape `(len(seq), 4)`, `np.expand_dims(x, axis)` inserts an axis of length 1, and `np.swapaxes(x, axis1, axis2)` swaps two axes.
+  For example, `ReorderedOneHot(alphabet_axis=0, dummy_axis=1)`, with the shape `(4, 1, len(seq))`, becomes `np.swapaxes(np.expand_dims(OneHot()(seq), 1), 0, 2)`.
+  `ReorderedOneHot.get_output_shape` has no replacement.
