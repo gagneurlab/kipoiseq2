@@ -47,6 +47,7 @@ Without `anchor_pos`, indels change the length of the sequence.
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
 `Interval` is immutable: methods such as `resize`, `shift` and `slop` return a new interval.
+`Variant` is immutable too, and holds only `chrom`, `pos`, `ref` and `alt`. The other VCF columns stay in the frame of `scan_vcf_variants`.
 `Variant.start` is `pos - 1` and `Variant.end` is `start + len(ref)`.
 
 ### Encoding sequences
