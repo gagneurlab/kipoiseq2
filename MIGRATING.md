@@ -155,3 +155,6 @@ The matchers use polars instead of pyranges:
   In 0.1, it raised an Exception for an invalid `anchor` at the first call, and a negative `width` gave intervals with `start` greater than `end`.
 - `Interval.slop(upstream, downstream)` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
   "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.
+- `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms.functional` trims a sequence to a length.
+  `use_strand` is keyword-only. `slice` raises a ValueError unless `0 <= i < j <= interval.width`.
+  In 0.1, `trim` raised an AssertionError if `j <= i`, and returned a longer interval if `j > interval.width`.

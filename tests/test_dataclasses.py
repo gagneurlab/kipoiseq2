@@ -178,11 +178,41 @@ def test_interval():
     assert i3.center(use_strand=True) == 16
     assert i3.center(use_strand=False) == 16
 
-    i2 = interval.trim(1, 10)
+    i2 = interval.slice(1, 10)
     assert i2.start == 10 and i2.end == 19
 
-    i2 = interval.trim(1, 10, use_strand=False)
+    i2 = interval.slice(1, 10, use_strand=False)
     assert i2.start == 11 and i2.end == 20
+
+
+@pytest.mark.parametrize("strand", ["+", "."])
+def test_interval_slice(strand):
+    interval = Interval("chr1", 10, 20, strand=strand)
+    assert interval.slice(0, 3) == Interval("chr1", 10, 13, strand=strand)
+    assert interval.slice(7, 10) == Interval("chr1", 17, 20, strand=strand)
+    assert interval.slice(0, 10) == interval
+
+
+@pytest.mark.parametrize(
+    "i, j, error, match",
+    [
+        (0, 0, ValueError, re.escape("i and j must fulfill 0 <= i < j <= width, got i=0, j=0 and width=10")),
+        (5, 3, ValueError, "^i and j must fulfill"),
+        (-1, 5, ValueError, "^i and j must fulfill"),
+        # trim(0, 20) extended the interval past its end
+        (0, 20, ValueError, "^i and j must fulfill"),
+        (0.0, 5, TypeError, "^i must be an int, not float$"),
+        (0, None, TypeError, "^j must be an int, not NoneType$"),
+    ],
+)
+def test_interval_slice_invalid(i, j, error, match):
+    with pytest.raises(error, match=match):
+        Interval("chr1", 10, 20).slice(i, j)
+
+
+def test_interval_slice_use_strand_is_keyword_only():
+    with pytest.raises(TypeError, match="positional argument"):
+        Interval("chr1", 10, 20).slice(0, 5, False)
 
 
 @pytest.mark.parametrize("other", ["chr1:10-20:-", None, 1, Variant("chr1", 11, "C", "T")])
@@ -389,7 +419,7 @@ def test_interval_slop_without_use_strand(strand):
 @pytest.mark.parametrize(
     "method",
     [
-        lambda i: i.trim(1, 5),
+        lambda i: i.slice(1, 5),
         lambda i: i.truncate(chrom_len=15),
         lambda i: i.resize(4),
         lambda i: i.shift(1),
@@ -397,7 +427,7 @@ def test_interval_slop_without_use_strand(strand):
         lambda i: i.unstrand(),
         lambda i: i.swap_strand(),
     ],
-    ids=["trim", "truncate", "resize", "shift", "slop", "unstrand", "swap_strand"],
+    ids=["slice", "truncate", "resize", "shift", "slop", "unstrand", "swap_strand"],
 )
 def test_interval_methods_keep_name_score_and_attrs(method):
     interval = Interval("chr1", 10, 20, strand="-", name="a", score=1.5, attrs={"gene": "A"})

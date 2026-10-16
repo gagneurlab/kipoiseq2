@@ -406,16 +406,26 @@ class Interval:
         start, end = _resize_bounds(self.start, self.end, width, anchor, reverse=use_strand and self.neg_strand)
         return replace(self, start=start, end=end)
 
-    def trim(self, i, j, use_strand=True):
-        """Keep the bases ``i`` to ``j - 1`` of the interval.
+    def slice(self, i: int, j: int, *, use_strand: bool = True) -> "Interval":
+        """Keep the bases ``i`` to ``j - 1`` of the interval, like ``seq[i:j]`` keeps them of its sequence.
 
         :param i: 0-based position of the first base to keep
         :param j: 0-based position after the last base to keep
         :param use_strand: if True, count the positions from ``end`` on "-" intervals.
-            On "+" and "." intervals, and if False, count them from ``start``.
-        :returns: a new interval
+            Otherwise count them from ``start``.
+        :returns: a new interval of width ``j - i``
+        :raises TypeError: if ``i`` or ``j`` is not an int
+        :raises ValueError: unless ``0 <= i < j <= width``
+
+        Example:
+
+        >>> Interval("chr1", 10, 20, strand="-").slice(0, 3)
+        Interval('chr1', 17, 20, strand='-', name='', score=0.0, attrs={})
         """
-        assert j > i
-        if self.strand == "-" and use_strand:
+        _check_int(i, "i")
+        _check_int(j, "j")
+        if not 0 <= i < j <= self.width:
+            raise ValueError(f"i and j must fulfill 0 <= i < j <= width, got i={i}, j={j} and width={self.width}")
+        if use_strand and self.neg_strand:
             return replace(self, start=self.end - j, end=self.end - i)
         return replace(self, start=self.start + i, end=self.start + j)
