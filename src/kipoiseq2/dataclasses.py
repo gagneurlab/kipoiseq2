@@ -293,7 +293,7 @@ class Interval:
             return replace(self)
         return replace(self, strand="+" if self.strand == "-" else "-")
 
-    def center(self, use_strand=True):
+    def center(self, *, use_strand: bool = True) -> int:
         """Compute the center of the interval.
 
         If ``start + end`` is odd, the center lies in the middle of a base.
@@ -304,21 +304,24 @@ class Interval:
         """
         return _center(self.start, self.end, reverse=use_strand and self.neg_strand)
 
-    def shift(self, x: int, use_strand: bool = True):
-        """Shift the interval by x.
+    def shift(self, offset: int, *, use_strand: bool = True) -> "Interval":
+        """Shift the interval downstream by ``offset`` bases.
 
-        This will perform:
-        (chrom, start + x, end + x)
+        :param offset: number of bases to shift. A negative value shifts upstream.
+        :param use_strand: if True, a positive ``offset`` moves "-" intervals towards ``start``.
+            Otherwise it moves intervals towards ``end``.
+        :returns: a new interval
+        :raises TypeError: if ``offset`` is not an int
 
-        If the strand is negative and use_strand is True, it will return:
-        (chrom, start - x, end - x)
+        Example:
 
-        :param x: shift amount
-        :param use_strand:
+        >>> Interval("chr1", 10, 20, strand="-").shift(5)
+        Interval('chr1', 5, 15, strand='-', name='', score=0.0, attrs={})
         """
+        _check_int(offset, "offset")
         if use_strand and self.neg_strand:
-            x = -x
-        return replace(self, start=self.start + x, end=self.end + x)
+            offset = -offset
+        return replace(self, start=self.start + offset, end=self.end + offset)
 
     def __str__(self) -> str:
         return f"{self.chrom}:{self.start}-{self.end}:{self.strand}"
@@ -345,17 +348,20 @@ class Interval:
         # the constructor checks the strand
         return cls(parts[0], int(match[1]), int(match[2]), strand=cast(_Strand, parts[2]))
 
-    def slop(self, upstream=0, downstream=0, use_strand=True):
+    def slop(self, *, upstream: int = 0, downstream: int = 0, use_strand: bool = True) -> "Interval":
         """Extend the interval upstream and downstream.
 
         :param upstream: number of bases to add upstream. A negative value removes bases.
         :param downstream: number of bases to add downstream. A negative value removes bases.
         :param use_strand: if True, upstream and downstream follow the strand:
             on a "-" interval, ``upstream`` moves ``end`` and ``downstream`` moves ``start``.
-            On "+" and "." intervals, and if False, ``upstream`` moves ``start`` and ``downstream`` moves ``end``.
+            Otherwise ``upstream`` moves ``start`` and ``downstream`` moves ``end``.
         :returns: a new interval
+        :raises TypeError: if ``upstream`` or ``downstream`` is not an int
         :raises ValueError: if the new ``start`` is greater than the new ``end``
         """
+        _check_int(upstream, "upstream")
+        _check_int(downstream, "downstream")
         if use_strand and self.neg_strand:
             upstream, downstream = downstream, upstream
         return replace(self, start=self.start - upstream, end=self.end + downstream)

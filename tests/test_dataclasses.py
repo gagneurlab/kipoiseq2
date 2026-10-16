@@ -322,6 +322,30 @@ def test_interval_from_str_invalid(s):
         Interval.from_str(s)
 
 
+@pytest.mark.parametrize(
+    "method",
+    [
+        lambda i: i.center(False),
+        lambda i: i.shift(1, False),
+        lambda i: i.slop(1, 2),
+    ],
+    ids=["center", "shift", "slop"],
+)
+def test_interval_method_options_are_keyword_only(method):
+    with pytest.raises(TypeError, match="positional argument"):
+        method(Interval("chr1", 10, 20))
+
+
+def test_interval_methods_raise_for_non_int_offsets():
+    interval = Interval("chr1", 10, 20)
+    with pytest.raises(TypeError, match="^offset must be an int, not float$"):
+        interval.shift(1.5)
+    with pytest.raises(TypeError, match="^upstream must be an int, not float$"):
+        interval.slop(upstream=1.0)
+    with pytest.raises(TypeError, match="^downstream must be an int, not str$"):
+        interval.slop(downstream="1")
+
+
 def test_interval_methods_raise_for_start_greater_than_end():
     with pytest.raises(ValueError, match="^start must not be greater than end"):
         Interval("chr1", 10, 20).slop(upstream=-6, downstream=-6)

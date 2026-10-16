@@ -136,6 +136,8 @@ The matchers use polars instead of pyranges:
 - Two intervals are equal if all their fields are equal, including `name`, `score` and `attrs`. The hash leaves out `attrs`.
   In 0.1, `==` compared only `chrom`, `start`, `end` and `strand`, also with other objects that have these attributes.
   To compare the locations, compare `(i.chrom, i.start, i.end, i.strand)`.
+- `use_strand` of `Interval.center` and `Interval.shift` is keyword-only, e.g. `interval.shift(10, use_strand=False)` instead of `interval.shift(10, False)`.
+  The parameter `x` of `shift` is renamed to `offset`. `Interval.slop` takes `upstream`, `downstream` and `use_strand` only as keywords.
 - `Interval.center(use_strand=False)` returns the center of the unstranded interval, so it rounds a center in the middle of a base up instead of down.
   On all strands, the result grows by 1 for intervals with an odd `start + end`.
   `Interval.center()` with the default `use_strand=True` is unchanged.
@@ -153,7 +155,7 @@ The matchers use polars instead of pyranges:
   For the 0.1 behavior of these anchors, pass `use_strand=False`.
   `anchor` is keyword-only. `ResizeInterval` checks `width` and `anchor` when it is created.
   In 0.1, it raised an Exception for an invalid `anchor` at the first call, and a negative `width` gave intervals with `start` greater than `end`.
-- `Interval.slop(upstream, downstream)` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
+- `Interval.slop` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
   "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.
 - `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms.functional` trims a sequence to a length.
   `use_strand` is keyword-only. `slice` raises a ValueError unless `0 <= i < j <= interval.width`.
