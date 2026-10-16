@@ -1,5 +1,9 @@
+import re
+import string
+
 import pytest
 
+from kipoiseq2.dataclasses import Interval
 from kipoiseq2.transforms.functional import fixed_len, pad, translate, trim
 
 
@@ -8,21 +12,70 @@ def test_trim():
     assert len(pad(seq, 20)) == 20
     assert len(fixed_len(seq, 20)) == 20
     assert len(fixed_len(seq, 5)) == 5
-    assert trim(seq, 5) == "TTTAT"
-    assert trim(seq, 5, "start") == "ACGTT"
-    assert trim(seq, 5, "end") == "TATNT"
-    with pytest.raises(Exception):
-        assert pad(seq, 5, "end") == "TATNT"
+    assert trim(seq, 5) == "GTTTA"
+    assert trim(seq, 5, anchor="start") == "ACGTT"
+    assert trim(seq, 5, anchor="end") == "TATNT"
 
 
 def test_fixed_len():
     seq = "ACGTTTATNT"
     assert len(fixed_len(seq, 20, value="N", anchor="end")) == 20
-    assert fixed_len([1, 2, 3, 4], 6, value=[0], anchor="end") == [0, 0, 1, 2, 3, 4]
-    assert fixed_len([1, 2, 3, 4], 2, value=[0], anchor="end") == [3, 4]
-
-    # expect error
     assert fixed_len(seq, length=3, value="NNN", anchor="end") == "TNT"
+    assert fixed_len(seq, 10) == seq
+
+
+def test_trim_to_zero():
+    # seq[-0:] returned the whole sequence
+    assert trim("ACGT", 0, anchor="end") == ""
+    assert trim("ACGT", 0, anchor="start") == ""
+    assert trim("ACGT", 0) == ""
+    assert fixed_len("ACGT", 0, anchor="end") == ""
+
+
+@pytest.mark.parametrize("anchor", ["start", "center", "end"])
+def test_fixed_len_keeps_the_letters_of_interval_resize(anchor):
+    for seq_len in range(16):
+        seq = string.ascii_lowercase[:seq_len]
+        for length in range(16):
+            interval = Interval("chr1", 0, seq_len).resize(length, anchor=anchor)
+            # the positions outside 0 to seq_len are padded
+            expected = "".join(seq[i] if 0 <= i < seq_len else "N" for i in range(interval.start, interval.end))
+            assert fixed_len(seq, length, anchor=anchor) == expected
+            if length >= seq_len:
+                assert pad(seq, length, anchor=anchor) == expected
+            if length <= seq_len:
+                assert trim(seq, length, anchor=anchor) == expected
+
+
+def test_trim_center_rounds_like_interval_resize():
+    # Interval("chr1", 0, 10).resize(7) is 1-8, and trim kept 2-9
+    assert trim("0123456789", 7) == "1234567"
+    assert pad("A", 4) == "NANN"
+
+
+@pytest.mark.parametrize(
+    "func, args, kwargs, error, match",
+    [
+        (pad, ("ACGT", 2), {}, ValueError, re.escape("length must be at least len(seq)=4, got 2")),
+        (trim, ("ACGT", 5), {}, ValueError, re.escape("length must be at most len(seq)=4, got 5")),
+        (fixed_len, ("ACGT", -1), {}, ValueError, "^length must be at least 0, got -1$"),
+        (pad, ("ACGT", 5.0), {}, TypeError, "^length must be an int, not float$"),
+        (trim, (["A", "C"], 1), {}, TypeError, "^seq must be a str, not list$"),
+        (fixed_len, (["A", "C"], 4), {"value": ["N"]}, TypeError, "^seq must be a str, not list$"),
+        (pad, ("ACGT", 6), {"value": ""}, ValueError, "^value must not be empty$"),
+        # fixed_len checks value also if it trims
+        (fixed_len, ("ACGT", 2), {"value": ""}, ValueError, "^value must not be empty$"),
+        (pad, ("ACGT", 6), {"value": ["N"]}, TypeError, "^value must be a str, not list$"),
+        (trim, ("ACGT", 2), {"anchor": "middle"}, ValueError, "^anchor must be "),
+        # anchor and value are keyword-only
+        (pad, ("ACGT", 6, "N"), {}, TypeError, "positional argument"),
+        (trim, ("ACGT", 2, "end"), {}, TypeError, "positional argument"),
+        (fixed_len, ("ACGT", 6, "end"), {}, TypeError, "positional argument"),
+    ],
+)
+def test_pad_trim_fixed_len_invalid(func, args, kwargs, error, match):
+    with pytest.raises(error, match=match):
+        func(*args, **kwargs)
 
 
 def test_pad_sequences():
@@ -37,10 +90,8 @@ def test_pad_sequences():
 def test_pad_value_with_several_elements():
     assert pad("A", 4, value="NM", anchor="start") == "ANMN"
     assert pad("A", 4, value="NM", anchor="end") == "NMNA"
-    assert pad("A", 4, value="NM", anchor="center") == "NMAN"
-    assert pad([1], 4, value=[0, 9], anchor="end") == [0, 9, 0, 1]
-    assert pad([[1, 0]], 4, value=[[0, 0], [9, 9]], anchor="start") == [[1, 0], [0, 0], [9, 9], [0, 0]]
-    assert fixed_len("A", 4, value="NN") == "NNAN"
+    assert pad("A", 4, value="NM", anchor="center") == "NANM"
+    assert fixed_len("A", 4, value="NN") == "NANN"
 
 
 @pytest.mark.parametrize("anchor", ["start", "end", "center"])
@@ -48,7 +99,6 @@ def test_pad_value_with_several_elements_length(anchor):
     for length in range(1, 12):
         for value in ["NM", "NMK"]:
             assert len(pad("A", length, value=value, anchor=anchor)) == length
-            assert len(pad(["A"], length, value=list(value), anchor=anchor)) == length
             assert len(fixed_len("A", length, value=value, anchor=anchor)) == length
 
 

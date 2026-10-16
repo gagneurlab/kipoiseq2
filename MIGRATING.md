@@ -160,3 +160,12 @@ The matchers use polars instead of pyranges:
 - `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms.functional` trims a sequence to a length.
   `use_strand` is keyword-only. `slice` raises a ValueError unless `0 <= i < j <= interval.width`.
   In 0.1, `trim` raised an AssertionError if `j <= i`, and returned a longer interval if `j > interval.width`.
+- `pad`, `trim` and `fixed_len` take only a str as `seq` and as `value`. In 0.1, they also took lists.
+  `anchor` and `value` are keyword-only: `pad(seq, length, value, anchor)` becomes `pad(seq, length, anchor=anchor, value=value)`,
+  and `fixed_len(seq, length, anchor, value)` becomes `fixed_len(seq, length, anchor=anchor, value=value)`.
+- They raise a TypeError if `length` is not an int, and a ValueError if `length` is out of range or if `value` is empty.
+  In 0.1, a `length` out of range raised an AssertionError, except a negative `length` in `trim` and `fixed_len`, which returned a wrong slice.
+  An empty `value` raised a ZeroDivisionError.
+- With `anchor="center"`, they keep the letters that `Interval.resize` keeps of an interval from 0 to `len(seq)`, so the result can move by one letter.
+  For example, `trim(seq, 7)` of a sequence of 10 letters returns `seq[1:8]` instead of `seq[2:9]`, and `pad("A", 4)` returns `"NANN"` instead of `"NNAN"`.
+- `trim(seq, 0, anchor="end")` returns `""` instead of `seq`.
