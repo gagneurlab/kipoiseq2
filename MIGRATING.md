@@ -139,11 +139,19 @@ The matchers use polars instead of pyranges:
 - `Interval.center(use_strand=False)` returns the center of the unstranded interval, so it rounds a center in the middle of a base up instead of down.
   On all strands, the result grows by 1 for intervals with an odd `start + end`.
   `Interval.center()` with the default `use_strand=True` is unchanged.
-- `resize_interval(interval, width)` with the default `anchor="center"`, and so `ResizeInterval`, returns `interval.resize(width)`.
-  On "+" and "." intervals, the result moves by one base if `interval.width()` and `width` differ in parity: towards `end` for an even `width`, and towards `start` for an odd `width`.
+- `resize_interval` is gone. Use `Interval.resize`, which takes an `anchor` now.
+  `resize_interval(interval, width, anchor)` becomes `interval.resize(width, anchor=anchor, use_strand=False)` for `anchor="start"` or `"end"`, and `interval.resize(width)` for `anchor="center"`.
+  With `anchor="center"`, the result on "+" and "." intervals moves by one base if `interval.width` and `width` differ in parity: towards `end` for an even `width`, and towards `start` for an odd `width`.
   For example, `Interval("chr1", 0, 11, strand="+")` resized to width 4 gives 4-8 instead of 3-7.
   "-" intervals give the same result as before.
   This holds for `start + end >= 0`. For a negative `start + end`, the old code rounded the center towards zero, so more results change.
-  `anchor="start"` and `anchor="end"` are unchanged: they keep the genomic `start` or `end` on all strands.
+- `Interval.resize(width, *, anchor="center", use_strand=True)` keeps the start, center or end of the interval.
+  `anchor="start"` keeps the 5' end, which is `end` on "-" intervals, unless `use_strand=False`.
+  `use_strand` is keyword-only. A negative `width` raises a ValueError, and `width=None` a TypeError.
+  In 0.1, a negative `width` gave an interval with `start` greater than `end`, and `width=None` a copy.
+- `ResizeInterval(width, *, anchor="center", use_strand=True)` calls `Interval.resize`, so the anchors `"start"` and `"end"` follow the strand.
+  For the 0.1 behavior of these anchors, pass `use_strand=False`.
+  `anchor` is keyword-only. `ResizeInterval` checks `width` and `anchor` when it is created.
+  In 0.1, it raised an Exception for an invalid `anchor` at the first call, and a negative `width` gave intervals with `start` greater than `end`.
 - `Interval.slop(upstream, downstream)` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
   "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.

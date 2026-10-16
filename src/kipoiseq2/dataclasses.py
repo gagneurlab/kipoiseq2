@@ -147,11 +147,49 @@ _Strand = Literal["+", "-", "."]
 _STRANDS = get_args(_Strand)
 """The values of ``_Strand``, for the checks at runtime."""
 
+_Anchor = Literal["start", "center", "end"]
+"""Type of the part that :meth:`Interval.resize` keeps of an interval."""
+_ANCHORS = get_args(_Anchor)
+"""The values of ``_Anchor``, for the checks at runtime."""
+
 
 def _check_int(value: object, name: str) -> None:
     """Raise a TypeError if ``value`` is not an int. A bool does not count as an int."""
     if not isinstance(value, numbers.Integral) or isinstance(value, bool):
         raise TypeError(f"{name} must be an int, not {type(value).__name__}")
+
+
+def _check_resize(width: int, anchor: str, *, width_name: str = "width") -> None:
+    """Raise a TypeError or ValueError for invalid arguments of :meth:`Interval.resize`.
+
+    :param width_name: the name of ``width`` in the error messages
+    """
+    _check_int(width, width_name)
+    if width < 0:
+        raise ValueError(f"{width_name} must be at least 0, got {width}")
+    if anchor not in _ANCHORS:
+        raise ValueError(f'anchor must be "start", "center" or "end", got {anchor!r}')
+
+
+def _center(start: int, end: int, *, reverse: bool) -> int:
+    """Return the center of the range from ``start`` to ``end``, rounded down if ``reverse``, and up otherwise."""
+    return (start + end) // 2 if reverse else (start + end + 1) // 2
+
+
+def _resize_bounds(start: int, end: int, width: int, anchor: str, *, reverse: bool) -> tuple[int, int]:
+    """Return the start and end of the range from ``start`` to ``end``, resized like :meth:`Interval.resize`.
+
+    :param reverse: if True, resize like a "-" interval, and if False, like a "+" interval
+    """
+    if anchor == "center":
+        center = _center(start, end, reverse=reverse)
+        if reverse:
+            return center - width // 2, center + width // 2 + width % 2
+        return center - width // 2 - width % 2, center + width // 2
+    # on a "-" interval, the start is at the genomic end
+    if (anchor == "start") != reverse:
+        return start, start + width
+    return end - width, end
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -264,11 +302,7 @@ class Interval:
         :param use_strand: if False, compute the center of the unstranded interval, which is rounded up on all strands
         :returns: the 0-based center position
         """
-        delta = (self.end + self.start) % 2
-        center = (self.end + self.start) // 2
-        if use_strand and self.neg_strand:
-            return center
-        return center + delta
+        return _center(self.start, self.end, reverse=use_strand and self.neg_strand)
 
     def shift(self, x: int, use_strand: bool = True):
         """Shift the interval by x.
@@ -344,25 +378,33 @@ class Interval:
         # int turns a float chrom_len into an int, and min never returns the default math.inf
         return replace(self, start=max(self.start, 0), end=int(min(self.end, chrom_len)))
 
-    def resize(self, width, use_strand=True):
-        """Resize the interval to ``width`` around its :meth:`center`.
+    def resize(self, width: int, *, anchor: _Anchor = "center", use_strand: bool = True) -> "Interval":
+        """Resize the interval to ``width``, keeping its start, center or end.
 
+        ``"start"`` keeps the 5' end and ``"end"`` keeps the 3' end of the interval.
+        On a "-" interval, the 5' end is ``end``, unless ``use_strand`` is False.
+        ``"center"`` keeps the :meth:`center`.
         If ``width`` is odd, the result has one more base upstream of the center than downstream.
-        Upstream is towards ``start`` on "+" and "." intervals, and towards ``end`` on "-" intervals.
+        Upstream is towards ``start``, or towards ``end`` on "-" intervals if ``use_strand`` is True.
 
-        :param width: width of the resized interval. If None, return the interval.
+        :param width: width of the resized interval
+        :param anchor: the part of the interval to keep: ``"start"``, ``"center"`` or ``"end"``
         :param use_strand: if False, resize as an unstranded interval. The result keeps the strand.
         :returns: a new interval
-        """
-        if width is None:
-            return self
+        :raises TypeError: if ``width`` is not an int
+        :raises ValueError: if ``width`` is negative, or if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``
 
-        center = self.center(use_strand=use_strand)
-        if self.neg_strand and use_strand:
-            # negative strand
-            return replace(self, start=center - width // 2, end=center + width // 2 + width % 2)
-        # positive strand
-        return replace(self, start=center - width // 2 - width % 2, end=center + width // 2)
+        Example:
+
+        >>> interval = Interval("chr1", 10, 20, strand="-")
+        >>> interval.resize(4, anchor="start")
+        Interval('chr1', 16, 20, strand='-', name='', score=0.0, attrs={})
+        >>> interval.resize(4, anchor="start", use_strand=False)
+        Interval('chr1', 10, 14, strand='-', name='', score=0.0, attrs={})
+        """
+        _check_resize(width, anchor)
+        start, end = _resize_bounds(self.start, self.end, width, anchor, reverse=use_strand and self.neg_strand)
+        return replace(self, start=start, end=end)
 
     def trim(self, i, j, use_strand=True):
         """Keep the bases ``i`` to ``j - 1`` of the interval.

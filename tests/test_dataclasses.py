@@ -319,6 +319,42 @@ def test_interval_resize_without_use_strand(strand):
             assert (i2.start, i2.end, i2.strand) == (expected.start, expected.end, strand)
 
 
+@pytest.mark.parametrize(
+    "strand, anchor, use_strand, shrunk, grown",
+    [
+        ("+", "start", True, (10, 14), (10, 23)),
+        ("+", "end", True, (16, 20), (7, 20)),
+        (".", "start", True, (10, 14), (10, 23)),
+        (".", "end", True, (16, 20), (7, 20)),
+        # the start of a "-" interval is its genomic end
+        ("-", "start", True, (16, 20), (7, 20)),
+        ("-", "end", True, (10, 14), (10, 23)),
+        ("-", "start", False, (10, 14), (10, 23)),
+        ("-", "end", False, (16, 20), (7, 20)),
+    ],
+)
+def test_interval_resize_anchor(strand, anchor, use_strand, shrunk, grown):
+    interval = Interval("chr1", 10, 20, strand=strand)
+    assert interval.resize(4, anchor=anchor, use_strand=use_strand) == Interval("chr1", *shrunk, strand=strand)
+    assert interval.resize(13, anchor=anchor, use_strand=use_strand) == Interval("chr1", *grown, strand=strand)
+
+
+def test_interval_resize_invalid():
+    interval = Interval("chr1", 10, 20)
+    assert interval.resize(0) == Interval("chr1", 15, 15)
+    with pytest.raises(ValueError, match="^width must be at least 0, got -2$"):
+        interval.resize(-2)
+    with pytest.raises(TypeError, match="^width must be an int, not NoneType$"):
+        interval.resize(None)
+    with pytest.raises(TypeError, match="^width must be an int, not float$"):
+        interval.resize(4.0)
+    with pytest.raises(ValueError, match=re.escape("""anchor must be "start", "center" or "end", got 'middle'""")):
+        interval.resize(4, anchor="middle")
+    # anchor and use_strand are keyword-only
+    with pytest.raises(TypeError, match="positional argument"):
+        interval.resize(4, "start")
+
+
 def test_interval_center_use_strand():
     # a center in the middle of a base is rounded towards the 3' end
     assert Interval("chr1", 0, 11, strand="+").center() == 6
