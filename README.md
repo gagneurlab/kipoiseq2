@@ -16,7 +16,7 @@ Requires Python >= 3.12.
 
 ```bash
 pip install kipoiseq2           # FASTA extractors and transforms (numpy, pyfaidx)
-pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes and scan_variant_pairs (polars, polars-bio)
+pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes, scan_variant_pairs and iter_variant_seqs (polars, polars-bio)
 ```
 
 kipoiseq2 does not depend on pandas or pyranges.
@@ -171,6 +171,41 @@ The pairs come in no fixed order, so sort them if the order matters.
 A null strand in the intervals frame means `"."`, as a missing strand column.
 polars-bio prints a progress bar on stderr for each collect.
 Set the environment variable `TQDM_DISABLE=1` to turn it off.
+
+### Batches of reference and alternative sequences
+
+`iter_variant_seqs` applies the variants of the pairs to the reference, and yields the sequences as polars DataFrame batches.
+By default, each pair gives one row, and the sequences keep the width of the interval around its center.
+A batch holds the keys `interval_idx` and `variant_idx`, the interval, the sequences `ref_seq` and `alt_seq`, and the encoded sequences `ref` and `alt`.
+The default encoding `Tokenizer()` gives uint8 tokens.
+An `Encoder` as `encoding` gives one-hot arrays in the dtype of the encoder.
+
+```python
+import polars as pl
+from kipoiseq2.extractors import FastaStringExtractor, iter_variant_seqs, scan_variant_pairs, scan_vcf_variants
+
+variants = scan_vcf_variants("variants.vcf.gz").collect()
+# a 1 kb window around each variant, in the order of the variants
+windows = variants.select("chrom", start=pl.col("start") - 500, end=pl.col("start") + 500)
+# keep each variant in its own window only
+pairs = scan_variant_pairs(windows, variants).filter(pl.col("interval_idx") == pl.col("variant_idx"))
+
+with FastaStringExtractor("genome.fa", use_strand=False) as fasta:
+    for batch in iter_variant_seqs(pairs, fasta, use_strand=True, pad_with_n=True, batch_size=64):
+        ref = batch["ref"].to_numpy()  # uint8 array of shape (64, 1000), without a copy
+        alt = batch["alt"].to_numpy()
+```
+
+A variant within 500 bases of a chromosome end gets a window that runs past the chromosome.
+`pad_with_n=True` fills the bases outside the chromosome with N.
+
+`group_by` sets the rows: the pairs with equal values in these columns give one row, with all their variants applied.
+`group_by=["interval_idx"]` applies all variants of an interval together.
+Variants that overlap within a row raise a ValueError, as in `VariantSeqExtractor`.
+Each pair applies its ALT allele. So for the genotypes of `scan_vcf_genotypes`, keep the default `carriers_only=True`: a False or a null in the column `variant_carrier` raises a ValueError.
+`encoding=Encoder()` gives uint8 one-hot arrays of shape `(rows, width, 4)`, and `encoding=None` gives only the sequences.
+`anchor="start"` or `"end"` keeps the 5' or the 3' end of the interval, and `anchor=None` lets indels change the length of `alt_seq`.
+Sequences of different lengths give polars List columns instead of Array columns.
 
 More examples:
 - The tests in [tests/](tests/) show the usage of every extractor and transform.

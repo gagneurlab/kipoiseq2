@@ -25,7 +25,8 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   The carrier check works per ALT allele, not per record: a sample with GT 0/2 carries the second ALT allele only.
 - `to_vcf` becomes `polars_bio.sink_vcf`, e.g. `pb.sink_vcf(pb.scan_vcf(path).filter(pl.col("qual") > 10), out_path)`.
 - `VariantIntervalQueryable` and the query classes of `kipoiseq.extractors.vcf_query` are gone: filter the polars frames instead.
-- `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with `scan_variant_pairs`, and apply them with `VariantSeqExtractor`.
+- `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with `scan_variant_pairs`, and apply them with `iter_variant_seqs`, which yields batches of reference and alternative sequences.
+  `VariantSeqExtractor` applies the variants of one interval.
 - `Variant.from_cyvcf` and `Variant.from_cyvcf_and_given_alt` are gone.
   A `Variant` has only `chrom`, `pos`, `ref` and `alt`, so `id`, `qual`, `filter`, `info`, `source` and `copy()` are gone.
   The VCF columns ID, QUAL, FILTER and INFO stay in the frame of `scan_vcf_variants`.
@@ -41,6 +42,7 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   ```
   The sort gives the pairs in VCF order, and per variant in the order of the intervals. `SingleVariantMatcher` grouped them by chromosome and strand.
   For the variants of each interval, as `MultiVariantsMatcher` gave them, group the pairs by `interval_idx`. An interval without variants has no pairs.
+  `iter_variant_seqs(pairs, reference, use_strand=True, group_by=["interval_idx"])` applies the variants of each interval together.
 - `scan_variant_pairs` takes the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end`, optionally `strand` and any other columns, instead of `pranges`.
   For a PyRanges object `pr`, pass `intervals=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
   For a list of Interval objects, pass `pl.DataFrame(intervals)`.
