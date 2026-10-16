@@ -35,7 +35,8 @@ def test_variant():
     assert v.alt == "T"
     assert isinstance(v.info, dict)
     assert len(v.info) == 0
-    assert v.qual == 0
+    assert v.id == ""
+    assert v.qual is None
     assert v.filter == "PASS"
     v.info["test"] = 10
     assert v.info["test"] == 10
@@ -68,9 +69,49 @@ def test_variant():
     v.id = "asd"
     v.qual = 10
     v.filter = "asd"
-    v.source = 2
 
-    assert isinstance(Variant("chr1", "10", "C", "T").pos, int)
+
+def test_variant_options():
+    info = {"AF": 0.1}
+    v = Variant("chr1", 10, "C", "T", id="rs1", qual=50, filter="q10", info=info)
+    assert (v.id, v.qual, v.filter) == ("rs1", 50.0, "q10")
+    assert v.info is info
+    # the options are keyword-only
+    with pytest.raises(TypeError):
+        Variant("chr1", 10, "C", "T", "rs1")
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"chrom": 1},
+        {"pos": "10"},
+        {"pos": 10.0},
+        {"pos": True},
+        {"ref": None},
+        {"alt": None},
+        {"id": None},
+        {"qual": "50"},
+        {"filter": None},
+        {"info": [("AF", 0.1)]},
+    ],
+    ids=lambda kwargs: next(iter(kwargs)),
+)
+def test_variant_wrong_type(kwargs):
+    with pytest.raises(TypeError, match=next(iter(kwargs))):
+        Variant(**{"chrom": "chr1", "pos": 10, "ref": "C", "alt": "T", **kwargs})
+
+
+@pytest.mark.parametrize("pos, ref", [(0, "C"), (-1, "C"), (10, "")])
+def test_variant_wrong_value(pos, ref):
+    with pytest.raises(ValueError):
+        Variant("chr1", pos, ref, "T")
+
+
+def test_variant_numpy_pos():
+    v = Variant("chr1", np.int64(10), "C", "T", qual=np.float32(0.5))
+    assert type(v.pos) is int
+    assert type(v.qual) is float
 
 
 @pytest.mark.parametrize("other", ["chr1:10:C>T", None, 1, Interval("chr1", 9, 10)])

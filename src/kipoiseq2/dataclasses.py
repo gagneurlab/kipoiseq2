@@ -5,11 +5,11 @@ import re
 from collections.abc import Iterator, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal, Optional, cast, get_args
+from typing import Any, Literal, cast, get_args
 
 
 class Variant:
-    """Variant container.
+    """A variant with one ALT allele, as in a VCF record.
 
     See also VCF file definition: http://samtools.github.io/hts-specs/VCFv4.3.pdf
 
@@ -17,45 +17,57 @@ class Variant:
        this class doesn't hold the genotype information.
 
     :param chrom: CHROM field in the VCF
-    :param pos: POS field in the VCF
+    :param pos: POS field in the VCF, 1-based
     :param ref: REF field in the VCF
-    :param alt: ALT field in the VCF
+    :param alt: one ALT allele of the ALT field in the VCF
     :param id: ID field in the VCF
-    :param qual: QUAL field in the VCF
+    :param qual: QUAL field in the VCF, or None if it is missing
     :param filter: FILTER field in the VCF
     :param info: INFO field in the VCF
-    :param source: reference to the original source object from which this
-        Variant object was created
+    :raises TypeError: if ``chrom``, ``ref``, ``alt``, ``id`` or ``filter`` is not a str,
+        ``pos`` is not an int, ``qual`` is not a number or None, or ``info`` is not a dict or None
+    :raises ValueError: if ``pos`` is less than 1 or ``ref`` is empty
     """
 
     def __init__(
         self,
         chrom: str,
-        pos: int,  # 1-based
+        pos: int,
         ref: str,
         alt: str,
+        *,
         id: str = "",
-        qual: float = 0,
+        qual: float | None = None,
         filter: str = "PASS",
-        info: Optional[dict] = None,
-        source=None,
+        info: dict | None = None,
     ):
+        for name, value in (("chrom", chrom), ("ref", ref), ("alt", alt), ("id", id), ("filter", filter)):
+            if not isinstance(value, str):
+                raise TypeError(f"{name} must be a str, not {type(value).__name__}")
+        if isinstance(pos, bool) or not isinstance(pos, numbers.Integral):
+            raise TypeError(f"pos must be an int, not {type(pos).__name__}")
+        if pos < 1:
+            raise ValueError(f"pos must be 1 or more, got {pos}")
+        if not ref:
+            raise ValueError("ref must not be empty")
+        if qual is not None and (isinstance(qual, bool) or not isinstance(qual, numbers.Real)):
+            raise TypeError(f"qual must be a number or None, not {type(qual).__name__}")
+        if info is not None and not isinstance(info, dict):
+            raise TypeError(f"info must be a dict or None, not {type(info).__name__}")
+
         # main 4 attributes
         # these should be immutable by default to not
         # run into any strange issues downstream.
-        self._chrom = str(chrom)
+        self._chrom = chrom
         self._pos = int(pos)
-        self._ref = str(ref)
-        self._alt = str(alt)
+        self._ref = ref
+        self._alt = alt
 
         # other 4 main VCF attributes
         self.id = id
-        self.qual = qual
+        self.qual = None if qual is None else float(qual)
         self.filter = filter
-        self.info = info or dict()
-
-        # additional attribute implemented by this class
-        self.source = source
+        self.info = {} if info is None else info
 
     def copy(self):
         return deepcopy(self)

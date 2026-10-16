@@ -184,7 +184,7 @@ def test_SingleVariantMatcher_yields_given_objects():
     # a table gives new Variant objects
     ((_, variant), *_) = list(SingleVariantMatcher(vcf_file, intervals=given))
     assert variant == variants[0]
-    assert variant.source is None
+    assert variant is not variants[0]
 
 
 def test_SingleVariantMatcher_pairs():
@@ -309,10 +309,6 @@ BOUNDARY_CASES = [
     ("insertion_anchor_first_base", Variant("chr1", 11, "A", "AT"), True),
     ("insertion_anchor_last_base", Variant("chr1", 20, "A", "AT"), True),
     ("insertion_anchor_after_end", Variant("chr1", 21, "A", "AT"), False),
-    # an empty REF gives a zero-length variant, which overlaps only strictly inside
-    ("empty_ref_at_start", Variant("chr1", 11, "", "T"), False),
-    ("empty_ref_inside", Variant("chr1", 15, "", "T"), True),
-    ("empty_ref_at_end", Variant("chr1", 21, "", "T"), False),
     ("other_chrom", Variant("chr2", 15, "A", "C"), False),
 ]
 
@@ -334,8 +330,7 @@ def test_SingleVariantMatcher_boundaries_in_one_batch():
 
 
 def test_SingleVariantMatcher_boundaries_vcf_file(tmp_path):
-    # a VCF record cannot have an empty REF
-    cases = [(v, overlaps) for _, v, overlaps in BOUNDARY_CASES if v.ref]
+    cases = [(v, overlaps) for _, v, overlaps in BOUNDARY_CASES]
     path = tmp_path / "boundaries.vcf"
     records = ["\t".join([v.chrom, str(v.pos), ".", v.ref, v.alt, ".", ".", "."]) for v, _ in cases]
     path.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n" + "\n".join(records) + "\n")

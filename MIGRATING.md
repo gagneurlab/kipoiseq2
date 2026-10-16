@@ -224,3 +224,8 @@ The matchers use polars instead of pyranges:
   - `to_scalar(x)` becomes `x.item()` for a numpy scalar.
   - `batch_iter(items, n)` becomes `itertools.batched(items, n)`, which yields tuples instead of lists.
   - `parse_alphabet(alphabet)` becomes `list(alphabet)`. For `Encoder` and `Tokenizer`, pass `Alphabet(list(alphabet))` from `kipoiseq2.alphabets`.
+- `Variant` takes `id`, `qual`, `filter` and `info` only as keyword arguments, and `source` is gone.
+  `Variant("chr1", 10, "C", "T", "rs1")` becomes `Variant("chr1", 10, "C", "T", id="rs1")`.
+- `Variant` raises a TypeError for arguments of the wrong type instead of converting them, and a ValueError for a `pos` below 1 or an empty `ref`.
+  In 0.1, `Variant("chr1", 10.7, "C", "T")` gave `pos=10`, and `Variant("chr1", "10", "C", "T")` gave `pos=10` too.
+- `Variant.qual` defaults to None, as for a missing QUAL, instead of 0.
