@@ -158,6 +158,14 @@ def _check_int(value: object, name: str) -> None:
         raise TypeError(f"{name} must be an int, not {type(value).__name__}")
 
 
+def _is_reverse(interval: "Interval", *, use_strand: bool) -> bool:
+    """Return True if ``use_strand`` is True and ``interval`` lies on the "-" strand.
+
+    Then the 5' end of ``interval`` is ``end``. The strand ``"."`` counts as ``"+"``.
+    """
+    return use_strand and interval.strand == "-"
+
+
 def _check_resize(width: int, anchor: str, *, width_name: str = "width") -> None:
     """Raise a TypeError or ValueError for invalid arguments of :meth:`Interval.resize`.
 
@@ -272,7 +280,7 @@ class Interval:
         :param use_strand: if False, compute the center of the unstranded interval, which is rounded up on all strands
         :returns: the 0-based center position
         """
-        return _center(self.start, self.end, reverse=use_strand and self.strand == "-")
+        return _center(self.start, self.end, reverse=_is_reverse(self, use_strand=use_strand))
 
     def shift(self, offset: int, *, use_strand: bool = True) -> "Interval":
         """Shift the interval downstream by ``offset`` bases.
@@ -289,7 +297,7 @@ class Interval:
         Interval('chr1', 5, 15, strand='-', attrs={})
         """
         _check_int(offset, "offset")
-        if use_strand and self.strand == "-":
+        if _is_reverse(self, use_strand=use_strand):
             offset = -offset
         return replace(self, start=self.start + offset, end=self.end + offset)
 
@@ -329,7 +337,7 @@ class Interval:
         """
         _check_int(upstream, "upstream")
         _check_int(downstream, "downstream")
-        if use_strand and self.strand == "-":
+        if _is_reverse(self, use_strand=use_strand):
             upstream, downstream = downstream, upstream
         return replace(self, start=self.start - upstream, end=self.end + downstream)
 
@@ -369,7 +377,9 @@ class Interval:
         Interval('chr1', 10, 14, strand='-', attrs={})
         """
         _check_resize(width, anchor)
-        start, end = _resize_bounds(self.start, self.end, width, anchor, reverse=use_strand and self.strand == "-")
+        start, end = _resize_bounds(
+            self.start, self.end, width, anchor, reverse=_is_reverse(self, use_strand=use_strand)
+        )
         return replace(self, start=start, end=end)
 
     def slice(self, i: int, j: int, *, use_strand: bool = True) -> "Interval":
@@ -392,6 +402,6 @@ class Interval:
         _check_int(j, "j")
         if not 0 <= i < j <= self.width:
             raise ValueError(f"i and j must fulfill 0 <= i < j <= width, got i={i}, j={j} and width={self.width}")
-        if use_strand and self.strand == "-":
+        if _is_reverse(self, use_strand=use_strand):
             return replace(self, start=self.end - j, end=self.end - i)
         return replace(self, start=self.start + i, end=self.start + j)
