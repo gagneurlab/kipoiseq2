@@ -89,7 +89,7 @@ def test_variant_eq_same_attributes():
 
 def test_interval():
     interval = Interval("chr1", 10, 20, strand="-")
-    interval.__repr__()
+    assert repr(interval) == "Interval(chrom='chr1', start=10, end=20, strand='-', attrs={})"
 
     assert interval.start == 10
     assert interval.end == 20

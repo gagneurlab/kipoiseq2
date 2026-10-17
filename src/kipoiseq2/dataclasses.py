@@ -199,7 +199,7 @@ def _resize_bounds(start: int, end: int, width: int, anchor: str, *, reverse: bo
     return end - width, end
 
 
-@dataclass(frozen=True, init=False, repr=False)
+@dataclass(frozen=True, init=False)
 class Interval:
     """Genomic interval.
 
@@ -228,7 +228,7 @@ class Interval:
     >>> interval.width
     10
     >>> interval.shift(5)
-    Interval('chr1', 5, 15, strand='-', attrs={'gene_id': 'g1'})
+    Interval(chrom='chr1', start=5, end=15, strand='-', attrs={'gene_id': 'g1'})
     """
 
     chrom: str
@@ -294,7 +294,7 @@ class Interval:
         Example:
 
         >>> Interval("chr1", 10, 20, strand="-").shift(5)
-        Interval('chr1', 5, 15, strand='-', attrs={})
+        Interval(chrom='chr1', start=5, end=15, strand='-', attrs={})
         """
         _check_int(offset, "offset")
         if _is_reverse(self, use_strand=use_strand):
@@ -303,9 +303,6 @@ class Interval:
 
     def __str__(self) -> str:
         return f"{self.chrom}:{self.start}-{self.end}:{self.strand}"
-
-    def __repr__(self) -> str:
-        return f"Interval({self.chrom!r}, {self.start}, {self.end}, strand={self.strand!r}, attrs={dict(self.attrs)!r})"
 
     @classmethod
     def from_str(cls, s: str) -> "Interval":
@@ -372,9 +369,9 @@ class Interval:
 
         >>> interval = Interval("chr1", 10, 20, strand="-")
         >>> interval.resize(4, anchor="start")
-        Interval('chr1', 16, 20, strand='-', attrs={})
+        Interval(chrom='chr1', start=16, end=20, strand='-', attrs={})
         >>> interval.resize(4, anchor="start", use_strand=False)
-        Interval('chr1', 10, 14, strand='-', attrs={})
+        Interval(chrom='chr1', start=10, end=14, strand='-', attrs={})
         """
         _check_resize(width, anchor)
         start, end = _resize_bounds(
@@ -396,7 +393,7 @@ class Interval:
         Example:
 
         >>> Interval("chr1", 10, 20, strand="-").slice(0, 3)
-        Interval('chr1', 17, 20, strand='-', attrs={})
+        Interval(chrom='chr1', start=17, end=20, strand='-', attrs={})
         """
         _check_int(i, "i")
         _check_int(j, "j")
