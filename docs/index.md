@@ -7,6 +7,7 @@
 
 api/dataclasses
 api/extractors
+api/alphabets
 api/functional
 api/transforms
 ```

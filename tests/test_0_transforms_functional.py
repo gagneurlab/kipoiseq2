@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pytest
 
+from kipoiseq2.alphabets import DNA as DNA_ALPHABET
 from kipoiseq2.dataclasses import Interval
 from kipoiseq2.transforms.functional import (
     fixed_len,
@@ -17,7 +18,8 @@ from kipoiseq2.transforms.functional import (
     trim,
 )
 from kipoiseq2.transforms.transforms import ResizeInterval
-from kipoiseq2.utils import DNA
+
+DNA = DNA_ALPHABET.letters
 
 
 def test_tokenize():

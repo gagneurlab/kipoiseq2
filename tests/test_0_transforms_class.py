@@ -39,7 +39,7 @@ def test_OneHot_axes(dummy_axis, swap, shape):
 
 
 # OneHot() encodes with one_hot_dna. OneHot(alphabet=list("ACGT")) encodes with one_hot,
-# because a list never equals the tuple DNA.
+# because a list never equals the tuple DNA.letters.
 @pytest.mark.parametrize("seq", ["", "ACGTN", "acgtn", "AcGtN"])
 @pytest.mark.parametrize("dtype", [None, np.float32, np.int8])
 def test_OneHot_paths_agree(seq, dtype):

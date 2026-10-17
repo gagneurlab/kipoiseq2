@@ -3,7 +3,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from kipoiseq2.utils import DNA
+from kipoiseq2.alphabets import DNA
 
 # sequence -> array
 
@@ -55,7 +55,7 @@ def one_hot2token(arr):
     return arr.argmax(axis=2)
 
 
-def one_hot2string(arr, alphabet=DNA):
+def one_hot2string(arr, alphabet=DNA.letters):
     """Convert a one-hot encoded array back to string
 
     :param arr: array of shape ``(n_seqs, seq_len, len(alphabet))``
@@ -109,7 +109,7 @@ def rc_rna(seq):
     return "".join([rc_hash[s] for s in reversed(seq)])
 
 
-def tokenize(seq, alphabet=DNA, neutral_alphabet=("N",)):
+def tokenize(seq, alphabet=DNA.letters, neutral_alphabet=("N",)):
     """Convert sequence to integers
 
     Lowercase letters encode like their uppercase form.
@@ -164,7 +164,7 @@ def token2one_hot(tokens, alphabet_size=4, neutral_value=0.25, dtype=None):
     return arr
 
 
-def one_hot(seq, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
+def one_hot(seq, alphabet=DNA.letters, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
     """One-hot encode a sequence.
 
     Lowercase letters encode like their uppercase form.
@@ -192,7 +192,7 @@ def one_hot(seq, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtyp
 # Reference: https://github.com/deepmind/deepmind-research/blob/fa8c9be4bb0cfd0b8492203eb2a9f31ef995633c/enformer/enformer.py#L306-L318
 def one_hot_dna(
     seq: str,
-    alphabet: list[str] | tuple[str, ...] = DNA,
+    alphabet: list[str] | tuple[str, ...] = DNA.letters,
     neutral_alphabet: list[str] | tuple[str, ...] = ("N",),
     neutral_value: Any = 0.25,
     dtype=np.float32,

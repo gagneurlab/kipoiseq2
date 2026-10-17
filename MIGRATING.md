@@ -60,3 +60,8 @@ The matchers use polars instead of pyranges:
   `OneHot()(seq)` returns an array of shape `(len(seq), 4)`, `np.expand_dims(x, axis)` inserts an axis of length 1, and `np.swapaxes(x, axis1, axis2)` swaps two axes.
   For example, `ReorderedOneHot(alphabet_axis=0, dummy_axis=1)`, with the shape `(4, 1, len(seq))`, becomes `np.swapaxes(np.expand_dims(OneHot()(seq), 1), 0, 2)`.
   `ReorderedOneHot.get_output_shape` has no replacement.
+- `kipoiseq2.utils.DNA`, `RNA`, `AMINO_ACIDS` and `alphabets` are gone. Use the `Alphabet` presets `DNA`, `RNA` and `AMINO_ACIDS` of the new module `kipoiseq2.alphabets` instead.
+  Their letters are `DNA.letters` and so on, e.g. `one_hot(seq, alphabet=RNA.letters)`.
+  `DNA` and `RNA` also have `N` and the other IUPAC ambiguity codes, as `DNA.ambiguous` and `RNA.ambiguous`.
+  `AMINO_ACIDS.letters` holds only the 20 standard amino acids, and `AMINO_ACIDS.ambiguous` holds `X`, `B` and `Z`.
+  In 0.1, `AMINO_ACIDS` also held the ambiguity codes `B` and `Z` as letters, so its one-hot arrays had 22 columns instead of 20.

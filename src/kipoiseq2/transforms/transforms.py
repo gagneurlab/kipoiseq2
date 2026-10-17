@@ -2,8 +2,8 @@ import warnings
 
 import numpy as np
 
+from kipoiseq2.alphabets import DNA
 from kipoiseq2.transforms import functional as F
-from kipoiseq2.utils import DNA
 
 __all__ = [
     "Compose",
@@ -109,7 +109,7 @@ class OneHot:
     :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
     """
 
-    def __init__(self, alphabet=DNA, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
+    def __init__(self, alphabet=DNA.letters, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
         F._check_letters(alphabet, "alphabet")
         F._check_letters(neutral_alphabet, "neutral_alphabet")
         self.alphabet = alphabet
@@ -118,7 +118,7 @@ class OneHot:
         self.dtype = dtype
 
     def __call__(self, seq):
-        if self.alphabet == DNA and self.neutral_alphabet == ("N",) and self.neutral_value == 0.25:
+        if self.alphabet == DNA.letters and self.neutral_alphabet == ("N",) and self.neutral_value == 0.25:
             return F.one_hot_dna(
                 seq,
                 alphabet=self.alphabet,
