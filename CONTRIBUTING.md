@@ -123,14 +123,16 @@ With MyST's native directive syntax, MyST parses the output of autodoc as Markdo
 Write docstrings in reStructuredText, with field lists for the parameters, the return value and the exceptions:
 
 ```python
-def trim(seq, length, anchor="center"):
+def trim(seq: str, length: int, *, anchor: Literal["start", "center", "end"] = "center") -> str:
     """Trim the sequence to ``length``.
 
     :param seq: the sequence to trim
-    :param length: the length of the trimmed sequence
+    :param length: the length of the trimmed sequence, at most ``len(seq)``
     :param anchor: the part of ``seq`` to keep: ``"start"``, ``"center"`` or ``"end"``
     :returns: the trimmed sequence
-    :raises ValueError: if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``
+    :raises TypeError: if ``seq`` is not a str, or if ``length`` is not an int
+    :raises ValueError: if ``length`` is negative or greater than ``len(seq)``,
+        or if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``
     """
 ```
 
