@@ -26,6 +26,8 @@ exclude_patterns = ["_build"]
 autoclass_content = "class"
 autodoc_typehints = "description"
 autodoc_member_order = "bysource"
+# show the defaults as in the source, e.g. alphabet=DNA instead of the repr of the Alphabet
+autodoc_preserve_defaults = True
 
 # intersphinx
 intersphinx_mapping = {
