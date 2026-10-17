@@ -11,9 +11,6 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-from numpy.typing import NDArray
-
 from kipoiseq2.dataclasses import _ANCHORS, Interval, Variant, _Anchor, _check_int, _is_reverse
 from kipoiseq2.encoders import Encoder, Tokenizer
 from kipoiseq2.extractors.base import SequenceExtractor
@@ -23,6 +20,7 @@ from kipoiseq2.transforms import reverse_complement
 
 if TYPE_CHECKING:
     import polars as pl
+    from numpy.typing import NDArray
 
 __all__ = ["iter_variant_seqs"]
 
@@ -74,8 +72,8 @@ def iter_variant_seqs(
     The encoded columns are polars Array columns if all sequences have the same length,
     i.e. if ``anchor`` is not None and all intervals of ``pairs`` have the same width.
     Then ``batch["alt"].to_numpy()`` returns a read-only array of shape ``(rows, length)`` for a Tokenizer,
-    or ``(rows, length, n_columns)`` for an Encoder, without a copy.
-    Otherwise the encoded columns are polars List columns, with one item per letter.
+    or ``(rows, length, n_columns)`` for an Encoder, without a copy unless the dtype is bool.
+    Otherwise the encoded columns of every batch are polars List columns, with one item per letter.
 
     :param pairs: DataFrame or LazyFrame with the columns chrom, start, end, strand,
         variant_pos, variant_ref, variant_alt and the columns of ``group_by``,
@@ -93,8 +91,8 @@ def iter_variant_seqs(
         None gives alt_seq the length that the variants give, as ``anchor_pos=None``.
     :param group_by: the columns of ``pairs`` that form the groups
     :param encoding: a :class:`~kipoiseq2.encoders.Tokenizer` for the tokens of
-        :meth:`~kipoiseq2.encoders.Tokenizer.tokenize`, an :class:`~kipoiseq2.encoders.Encoder` for the one-hot arrays of
-        :meth:`~kipoiseq2.encoders.Encoder.one_hot`, or None for no encoded columns.
+        :meth:`~kipoiseq2.encoders.Tokenizer.tokenize_series`, an :class:`~kipoiseq2.encoders.Encoder` for the one-hot
+        arrays of :meth:`~kipoiseq2.encoders.Encoder.one_hot_series`, or None for no encoded columns.
         The dtype of ``encoding`` sets the dtype of the encoded columns, e.g. ``Encoder(dtype=np.float16)``.
     :param pad_with_n: if True, use N for the bases outside the chromosome. Otherwise raise a ValueError for them.
     :param batch_size: number of rows per batch. The last batch can have fewer rows.
@@ -105,9 +103,9 @@ def iter_variant_seqs(
         - ref_seq: the reference sequence of the interval
         - alt_seq: the sequence of the interval with the variants of the group applied
         - ref and alt: ref_seq and alt_seq encoded, unless ``encoding`` is None.
-          For a Tokenizer, they are ``pl.Array(dtype, length)`` with the polars type of its dtype,
-          e.g. ``pl.UInt8`` for the default ``Tokenizer()``.
-          For an Encoder, they are ``pl.Array(dtype, (length, n_columns))`` with the polars type of its dtype.
+          For a Tokenizer, they are ``pl.Array(dtype, length)`` or ``pl.List(dtype)``, with the polars type of its
+          dtype, e.g. ``pl.UInt8`` for the default ``Tokenizer()``.
+          For an Encoder, they are ``pl.Array(dtype, (length, n_columns))`` or ``pl.List(pl.Array(dtype, n_columns))``.
           length is the number of letters.
     :raises TypeError: if ``pairs`` is not a polars DataFrame or LazyFrame,
         if ``reference`` is not a :class:`~kipoiseq2.extractors.base.SequenceExtractor`,
@@ -146,14 +144,13 @@ def iter_variant_seqs(
     clash = [c for c in keys if c in _SEQ_COLUMNS]
     if clash:
         raise ValueError(f"group_by must not contain {clash}, because the batches use these names for the sequences")
-    encoder: Callable[[str], NDArray[Any]] | None = None
-    letter_length = 1
+    # the method for a Series encodes the batches, and the method for one sequence finds the group of an error
+    encode_series: Callable[[pl.Series], pl.Series] | None = None
+    encode: Callable[[str], NDArray[Any]] | None = None
     if isinstance(encoding, Tokenizer):
-        encoder = encoding.tokenize
-        letter_length = len(encoding.alphabet.letters[0])
+        encode_series, encode = encoding.tokenize_series, encoding.tokenize
     elif isinstance(encoding, Encoder):
-        encoder = encoding.one_hot
-        letter_length = len(encoding.alphabet.letters[0])
+        encode_series, encode = encoding.one_hot_series, encoding.one_hot
     elif encoding is not None:
         raise TypeError(f"encoding must be a Tokenizer, an Encoder or None, not {type(encoding).__name__}")
     _check_int(batch_size, "batch_size")
@@ -209,8 +206,8 @@ def iter_variant_seqs(
         key_names=key_names,
         use_strand=use_strand,
         anchor=anchor,
-        encoder=encoder,
-        letter_length=letter_length,
+        encode_series=encode_series,
+        encode=encode,
         same_length=same_length,
         pad_with_n=pad_with_n,
         batch_size=batch_size,
@@ -225,8 +222,8 @@ def _iter_batches(
     key_names: list[str],
     use_strand: bool,
     anchor: _Anchor | None,
-    encoder: Callable[[str], NDArray[Any]] | None,
-    letter_length: int,
+    encode_series: Callable[[pl.Series], pl.Series] | None,
+    encode: Callable[[str], NDArray[Any]] | None,
     same_length: bool,
     pad_with_n: bool,
     batch_size: int,
@@ -237,9 +234,10 @@ def _iter_batches(
         the variant columns as lists, and margin
     :param keys: the columns of ``group_by``
     :param key_names: the names of the keys in ``groups``
-    :param encoder: the function that encodes a sequence, or None for no encoded columns
-    :param letter_length: the length of a letter of ``encoder``
-    :param same_length: if True, all sequences have the same length, so the encoded columns are Array columns
+    :param encode_series: the method that encodes a Series of sequences, or None for no encoded columns
+    :param encode: the method that encodes one sequence, or None for no encoded columns
+    :param same_length: if True, all sequences have the same length, so the encoded columns are Array columns.
+        Otherwise they are List columns.
     """
     import polars as pl
 
@@ -273,29 +271,59 @@ def _iter_batches(
             ref_seqs.append(ref_seq)
             alt_seqs.append(alt_seq)
 
+        ref_series = pl.Series("ref_seq", ref_seqs, dtype=pl.String)
+        alt_series = pl.Series("alt_seq", alt_seqs, dtype=pl.String)
         columns = [
             *(batch.get_column(name).alias(k) for k, name in zip(keys, key_names)),
             *(batch.get_column(c) for c in _INTERVAL_COLUMNS if c not in keys),
-            pl.Series("ref_seq", ref_seqs, dtype=pl.String),
-            pl.Series("alt_seq", alt_seqs, dtype=pl.String),
+            ref_series,
+            alt_series,
         ]
-        if encoder is not None:
+        if encode_series is not None and encode is not None:
             try:
                 columns += [
-                    _encoded_series("ref", ref_seqs, encoder, letter_length=letter_length, same_length=same_length),
-                    _encoded_series("alt", alt_seqs, encoder, letter_length=letter_length, same_length=same_length),
+                    _encoded(encode_series, ref_series, same_length=same_length).alias("ref"),
+                    _encoded(encode_series, alt_series, same_length=same_length).alias("alt"),
                 ]
             except ValueError:
-                # encode row by row to find the group of the error
-                for i, seqs in enumerate(zip(ref_seqs, alt_seqs)):
-                    try:
-                        for seq in seqs:
-                            encoder(seq)
-                    except ValueError as e:
-                        e.add_note(_group_note(batch, i, keys, key_names))
-                        raise
+                _raise_with_group(encode, ref_seqs, alt_seqs, batch, keys, key_names)
                 raise
         yield pl.DataFrame(columns)
+
+
+def _encoded(encode_series: Callable[[pl.Series], pl.Series], seqs: pl.Series, *, same_length: bool) -> pl.Series:
+    """Return the encoded ``seqs``, as an Array column if ``same_length`` is True, and as a List column otherwise.
+
+    :raises ValueError: if ``encode_series`` cannot encode a sequence
+    """
+    import polars as pl
+
+    series = encode_series(seqs)
+    if not same_length and isinstance(series.dtype, pl.Array):
+        # the sequences of this batch have the same length by chance, but all batches share one schema
+        series = series.cast(pl.List(series.dtype.inner))
+    return series
+
+
+def _raise_with_group(
+    encode: Callable[[str], NDArray[Any]],
+    ref_seqs: list[str],
+    alt_seqs: list[str],
+    batch: pl.DataFrame,
+    keys: list[str],
+    key_names: list[str],
+) -> None:
+    """Encode the sequences row by row, and raise the first ValueError with a note that names the group of its row.
+
+    If no sequence raises a ValueError, it returns, and the caller raises its own error.
+    """
+    for i, (ref_seq, alt_seq) in enumerate(zip(ref_seqs, alt_seqs)):
+        try:
+            encode(ref_seq)
+            encode(alt_seq)
+        except ValueError as e:
+            e.add_note(_group_note(batch, i, keys, key_names))
+            raise
 
 
 def _group_note(batch: pl.DataFrame, i: int, keys: list[str], key_names: list[str]) -> str:
@@ -319,40 +347,6 @@ def _ref_seq(
     if _is_reverse(interval, use_strand=extractor.use_strand):
         return reverse_complement(seq)
     return seq
-
-
-def _encoded_series(
-    name: str, seqs: list[str], encoder: Callable[[str], NDArray[Any]], *, letter_length: int, same_length: bool
-) -> pl.Series:
-    """Return the encoded sequences of a batch as one polars Series.
-
-    ``encoder`` encodes the joined sequences in one call, which is faster than one call per sequence.
-
-    :param seqs: the sequences of the rows
-    :param encoder: the function that encodes a sequence into an array with one item per letter
-    :param letter_length: the length of a letter of ``encoder``
-    :param same_length: if True, all sequences have the same length, and the Series is an Array column.
-        Otherwise it is a List column with one item per letter.
-    :raises ValueError: if ``encoder`` cannot encode a sequence
-    """
-    import polars as pl
-
-    lengths = [len(seq) // letter_length for seq in seqs]
-    letters = encoder("".join(seqs))
-    if len(letters) != sum(lengths):
-        # the joined sequences can split into letters even if a sequence cannot
-        raise ValueError(f"the length of a sequence is not a multiple of the letter length {letter_length}")
-    if same_length:
-        # polars keeps the array without a copy
-        return pl.Series(name, letters.reshape(len(seqs), lengths[0], *letters.shape[1:]))
-    arrays = np.split(letters, np.cumsum(lengths[:-1]))
-    inner = pl.Series(np.empty(0, dtype=letters.dtype)).dtype
-    # polars builds an Array column if all arrays have the same length, so cast it
-    series = pl.Series(name, [a.ravel() for a in arrays]).cast(pl.List(inner))
-    if letters.ndim == 2:
-        # one Array of n_columns values per letter
-        series = series.list.eval(pl.element().reshape((-1, letters.shape[1])))
-    return series
 
 
 class _WindowReference:

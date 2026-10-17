@@ -370,10 +370,19 @@ def test_iter_variant_seqs_list_for_different_widths():
     assert out["alt"].list.len().to_list() == (out["end"] - out["start"]).to_list()
 
 
-def test_iter_variant_seqs_list_with_equal_lengths_in_batch():
+@pytest.mark.parametrize(
+    "encoding, polars_dtype", [(Tokenizer(), pl.List(pl.UInt8)), (FLOAT32_ONE_HOT, pl.List(pl.Array(pl.Float32, 4)))]
+)
+def test_iter_variant_seqs_list_with_equal_lengths_in_batch(encoding, polars_dtype):
     # a batch whose sequences have equal lengths still gives a List column
-    batches = list(iter_variant_seqs(pairs_of(INTERVALS), SeqReference(), use_strand=True, batch_size=1))
-    assert {b.schema["alt"] for b in batches} == {pl.List(pl.UInt8)}
+    batches = list(
+        iter_variant_seqs(pairs_of(INTERVALS), SeqReference(), use_strand=True, encoding=encoding, batch_size=1)
+    )
+    assert {b.schema[c] for b in batches for c in ["ref", "alt"]} == {polars_dtype}
+    out = pl.concat(batches)
+    encode = encoding.tokenize if isinstance(encoding, Tokenizer) else encoding.one_hot
+    for column, seq_column in [("ref", "ref_seq"), ("alt", "alt_seq")]:
+        assert out[column].to_list() == [encode(seq).tolist() for seq in out[seq_column]]
 
 
 def test_iter_variant_seqs_no_encoding():

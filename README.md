@@ -16,7 +16,8 @@ Requires Python >= 3.12.
 
 ```bash
 pip install kipoiseq2           # FASTA extractors and transforms (numpy, pyfaidx)
-pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes, scan_variant_pairs and iter_variant_seqs (polars, polars-bio)
+pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes, scan_variant_pairs, iter_variant_seqs
+                                # and the Series methods of the encoders (polars, polars-bio, pyarrow)
 ```
 
 kipoiseq2 does not depend on pandas or pyranges.
@@ -97,6 +98,20 @@ rows = np.zeros((15, 5), dtype=np.float32)
 rows[:4, :4] = np.eye(4)
 rows[4:, 4] = 1
 rows[Tokenizer().tokenize("ACGTNR")]  # float32 array of shape (6, 5)
+```
+
+`Tokenizer.tokenize_series` and `Encoder.one_hot_series` encode all sequences of a polars Series at once.
+They need the `ranges` extra.
+If all sequences have the same length, they return a polars Array column, and its `to_numpy()` needs no copy.
+Otherwise they return a List column.
+
+```python
+import polars as pl
+
+seqs = pl.Series("seq", ["ACGTN", "NNACG"])
+Tokenizer().tokenize_series(seqs).to_numpy()  # uint8 array of shape (2, 5)
+Encoder().one_hot_series(seqs).dtype  # Array(UInt8, shape=(5, 4))
+Tokenizer().tokenize_series(pl.Series(["ACGT", "A"])).dtype  # List(UInt8)
 ```
 
 ### Reading VCF files as tables
@@ -184,6 +199,7 @@ By default, each pair gives one row, and the sequences keep the width of the int
 A batch holds the keys `interval_idx` and `variant_idx`, the interval, the sequences `ref_seq` and `alt_seq`, and the encoded sequences `ref` and `alt`.
 The default encoding `Tokenizer()` gives uint8 tokens.
 An `Encoder` as `encoding` gives one-hot arrays in the dtype of the encoder.
+Each batch encodes its sequences with `tokenize_series` or `one_hot_series`.
 
 ```python
 import polars as pl
