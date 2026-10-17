@@ -92,7 +92,8 @@ _ANCHORS = get_args(_Anchor)
 
 def _check_int(value: object, name: str) -> None:
     """Raise a TypeError if ``value`` is not an int. A bool does not count as an int."""
-    if not isinstance(value, numbers.Integral) or isinstance(value, bool):
+    # the type check is much faster than isinstance with numbers.Integral, and covers most values
+    if type(value) is not int and (not isinstance(value, numbers.Integral) or isinstance(value, bool)):
         raise TypeError(f"{name} must be an int, not {type(value).__name__}")
 
 
