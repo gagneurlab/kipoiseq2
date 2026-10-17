@@ -25,7 +25,6 @@ array([0, 1, 2, 3, 4, 5], dtype=uint8)
 """
 
 import functools
-import numbers
 from collections.abc import Container, Mapping
 from types import MappingProxyType
 from typing import Any, Literal, get_args
@@ -34,6 +33,7 @@ import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from kipoiseq2.alphabets import DNA, Alphabet
+from kipoiseq2.dataclasses import _check_int
 
 __all__ = ["Encoder", "Tokenizer"]
 
@@ -158,8 +158,7 @@ class Tokenizer:
                     f"but token_map {' and '.join(problems)}"
                 )
             for letter, token in token_map.items():
-                if not isinstance(token, numbers.Integral) or isinstance(token, bool):
-                    raise TypeError(f"the tokens of token_map must be ints, but {letter!r} maps to {token!r}")
+                _check_int(token, f"the token of {letter!r} in token_map")
             tokens = {letter: int(token_map[letter]) for letter in letters}
         else:
             raise TypeError(

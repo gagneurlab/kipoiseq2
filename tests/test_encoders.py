@@ -185,9 +185,9 @@ def test_tokenizer_token_map_large_tokens(dtype):
         ),
         ({**DNA_TOKENS, "N": -1}, ValueError, "the tokens of dtype uint8 must be from 0 to 255, but 'N' has -1"),
         ({**DNA_TOKENS, "N": 256}, ValueError, "the tokens of dtype uint8 must be from 0 to 255, but 'N' has 256"),
-        ({**DNA_TOKENS, "N": 4.0}, TypeError, "the tokens of token_map must be ints, but 'N' maps to 4.0"),
-        ({**DNA_TOKENS, "N": True}, TypeError, "the tokens of token_map must be ints, but 'N' maps to True"),
-        ({**DNA_TOKENS, "N": "4"}, TypeError, "the tokens of token_map must be ints, but 'N' maps to '4'"),
+        ({**DNA_TOKENS, "N": 4.0}, TypeError, "the token of 'N' in token_map must be an int, not float"),
+        ({**DNA_TOKENS, "N": True}, TypeError, "the token of 'N' in token_map must be an int, not bool"),
+        ({**DNA_TOKENS, "N": "4"}, TypeError, "the token of 'N' in token_map must be an int, not str"),
         ([("A", 0)], TypeError, "token_map must be a mapping from letters to tokens or None, not list"),
     ],
 )
