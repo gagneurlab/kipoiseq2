@@ -57,7 +57,7 @@ def _code_row(letters, code_letters, ambiguous):
 def _upper_hint(name, upper):
     return (
         f". The lookup is case-sensitive, but {name} has the uppercase forms of {upper}: "
-        "uppercase the sequence with seq.upper(), or read it with FastaStringExtractor(force_upper=True)"
+        "uppercase the sequence with seq.upper(), or read it with FastaStringExtractor, which uppercases by default"
     )
 
 
