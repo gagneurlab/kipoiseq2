@@ -6,6 +6,7 @@ __version__ = "0.1.0"
 # first import dataclasses, because the subpackages import them from kipoiseq2
 from .dataclasses import Variant, Interval
 from .alphabets import AMINO_ACIDS, DNA, RNA, Alphabet
+from .encoders import Encoder, Tokenizer
 from . import extractors
 from . import transforms
 # isort: on

@@ -2,7 +2,6 @@ import warnings
 
 import numpy as np
 
-from kipoiseq2.alphabets import DNA
 from kipoiseq2.transforms import functional as F
 
 __all__ = [
@@ -10,7 +9,6 @@ __all__ = [
     "DummyAxis",
     "SwapAxes",
     "ResizeInterval",
-    "OneHot",
     "SplitSplicingSeq",
 ]
 
@@ -22,8 +20,9 @@ class Compose:
 
     Example:
 
-    >>> from kipoiseq2.transforms import Compose, DummyAxis, OneHot
-    >>> Compose([OneHot(), DummyAxis(0)])("ACGT").shape
+    >>> from kipoiseq2 import Encoder
+    >>> from kipoiseq2.transforms import Compose, DummyAxis
+    >>> Compose([Encoder().one_hot, DummyAxis(0)])("ACGT").shape
     (1, 4, 4)
     """
 
@@ -89,51 +88,6 @@ class ResizeInterval:
 
     def __call__(self, interval):
         return F.resize_interval(interval, self.width, self.anchor)
-
-
-# Sequences
-
-
-class OneHot:
-    """One-hot encode the sequence
-
-    Lowercase letters encode like their uppercase form.
-    Letters that are not in ``alphabet`` or ``neutral_alphabet`` raise a ValueError.
-    To encode IUPAC codes such as ``R`` like ``N``, add them to ``neutral_alphabet``.
-
-    :param alphabet: alphabet to use for the one-hot encoding. This defines the order of the one-hot encoding.
-        A list or tuple of letters, e.g. ``list("ACGT")`` or ``["A", "C", "G", "T"]``
-    :param neutral_alphabet: letters to encode as ``neutral_value`` in every column, as a list or tuple
-    :param neutral_value: value of the neutral element
-    :param dtype: defines the numpy dtype of the returned array.
-    :raises TypeError: if ``alphabet`` or ``neutral_alphabet`` is not a list or tuple of strings
-    """
-
-    def __init__(self, alphabet=DNA.letters, neutral_alphabet=("N",), neutral_value=0.25, dtype=None):
-        F._check_letters(alphabet, "alphabet")
-        F._check_letters(neutral_alphabet, "neutral_alphabet")
-        self.alphabet = alphabet
-        self.neutral_alphabet = neutral_alphabet
-        self.neutral_value = neutral_value
-        self.dtype = dtype
-
-    def __call__(self, seq):
-        if self.alphabet == DNA.letters and self.neutral_alphabet == ("N",) and self.neutral_value == 0.25:
-            return F.one_hot_dna(
-                seq,
-                alphabet=self.alphabet,
-                neutral_alphabet=self.neutral_alphabet,
-                neutral_value=self.neutral_value,
-                dtype=self.dtype,
-            )
-        else:
-            return F.one_hot(
-                seq,
-                alphabet=self.alphabet,
-                neutral_alphabet=self.neutral_alphabet,
-                neutral_value=self.neutral_value,
-                dtype=self.dtype,
-            )
 
 
 # Splicing
