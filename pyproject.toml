@@ -114,6 +114,11 @@ commands = [["sphinx-build", "-W", "--keep-going", "-b", "html", "docs", "docs/_
 
 [tool.mypy]
 python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+# these packages ship no type annotations
+module = ["pyfaidx", "polars_bio", "Bio.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
