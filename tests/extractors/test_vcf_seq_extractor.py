@@ -160,9 +160,9 @@ def test_extract_vcf_variants(variant_seq_extractor, alt_kinds_vcf):
     interval = Interval("chr1", 0, 21)
     variants = [variant for _, variant in SingleVariantMatcher(alt_kinds_vcf, intervals=[interval])]
     seq = variant_seq_extractor.extract(interval, variants)
-    # the reference ACGTAACGTAACGTAACGTAA with C>A at 2, T>acg at 4 and A>AN at 6.
+    # the reference ACGTAACGTAACGTAACGTAA with C>A at 2, T>ACG at 4 and A>AN at 6.
     # The ALT ".", "*", symbolic ALT alleles and the breakend change nothing.
-    assert seq == "AAGacgAANCGTAACGTAACGTAA"
+    assert seq == "AAGACGAANCGTAACGTAACGTAA"
 
 
 def test_extract_anchor_rule(variant_seq_extractor):

@@ -31,10 +31,11 @@ EDGE_CASE_VCF = _EDGE_CASE_HEADER + "".join("\t".join(line.split()) + "\n" for l
 
 # A plain-text VCF with one record per kind of ALT allele, and a multi-allelic record at the end.
 # REF follows sample.5kb.fa, so VariantSeqExtractor can apply the variants.
+# The record at POS 4 is lowercase, because VCF bases are case-insensitive.
 _ALT_KINDS_RECORDS = """\
 #CHROM POS ID REF ALT QUAL FILTER INFO FORMAT S1 S2
 chr1 2 . C A . . . GT 0/1 0/0
-chr1 4 . T acg . . . GT 0/1 0/0
+chr1 4 . t acg . . . GT 0/1 0/0
 chr1 6 . A AN . . . GT 0/1 0/0
 chr1 8 . G . . . . GT 0/0 0/0
 chr1 10 . A * . . . GT 0/1 0/0

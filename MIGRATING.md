@@ -16,6 +16,7 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   Both keep only the ALT alleles that are sequences of the bases A, C, G, T and N, in any case.
   Unlike `MultiSampleVCF`, they keep the ALT alleles that contain N, and they drop symbolic ALT alleles such as `<DEL>`.
   They also drop a missing ALT (`.`), which `MultiSampleVCF` gave as an empty alt.
+  Both give `ref` and `alt` in uppercase, because VCF bases are case-insensitive. `MultiSampleVCF` kept the case of the file.
 - `query_all().filter(lambda ...)` and `FilterVariantQuery` become a polars filter on `scan_vcf_variants(path)`.
   For example, `filter(lambda v: v.qual > 10)` becomes `.filter(pl.col("qual") > 10)`, and `FilterVariantQuery()` becomes `.filter(pl.col("filter") == "PASS")`.
   polars-bio gives a missing QUAL (`.`) as null and a missing FILTER (`.`) as an empty string.

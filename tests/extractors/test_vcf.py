@@ -76,11 +76,11 @@ def test_scan_vcf_variants_edge_cases(edge_case_vcf):
 
 def test_scan_vcf_variants_alt_kinds(alt_kinds_vcf):
     df = scan_vcf_variants(alt_kinds_vcf).collect()
-    # ALT ".", "*", symbolic ALT alleles and the breakend are dropped, and alt keeps its case.
+    # ALT ".", "*", symbolic ALT alleles and the breakend are dropped, and ref and alt are uppercase.
     # allele_idx counts the dropped <DEL>.
     assert df.select("pos", "ref", "alt", "allele_idx").rows() == [
         (2, "C", "A", 1),
-        (4, "T", "acg", 1),
+        (4, "T", "ACG", 1),
         (6, "A", "AN", 1),
         (23, "G", "A", 1),
         (23, "G", "C", 3),
@@ -121,10 +121,11 @@ def test_scan_vcf_variants_zero_based(edge_case_vcf):
 
 def test_scan_vcf_variants_all_alts(alt_kinds_vcf):
     df = scan_vcf_variants(alt_kinds_vcf, sequence_alts_only=False).collect()
-    # every ALT allele gives a row, and ALT "." gives a null alt
+    # every ALT allele gives a row, and ALT "." gives a null alt.
+    # The sequences are uppercase, but the breakend keeps its text, so chr1 stays lowercase.
     assert df.select("pos", "alt", "allele_idx").rows() == [
         (2, "A", 1),
-        (4, "acg", 1),
+        (4, "ACG", 1),
         (6, "AN", 1),
         (8, None, 1),
         (10, "*", 1),
@@ -223,7 +224,7 @@ def test_scan_vcf_genotypes_alt_kinds(alt_kinds_vcf):
     # for the ALT alleles A,<DEL>,C, S1 with GT 2/3 carries C, and S2 with GT 0/1 carries A
     assert df.select("pos", "alt", "allele_idx", "sample", "GT").rows() == [
         (2, "A", 1, "S1", "0/1"),
-        (4, "acg", 1, "S1", "0/1"),
+        (4, "ACG", 1, "S1", "0/1"),
         (6, "AN", 1, "S1", "0/1"),
         (23, "A", 1, "S2", "0/1"),
         (23, "C", 3, "S1", "2/3"),

@@ -68,14 +68,21 @@ def _scan_vcf(
         start=start,
         end=start + pl.col("ref").str.len_chars(),
         pos=start + 1,
+        ref=pl.col("ref").str.to_uppercase(),
         alt=alts,
         allele_idx=pl.int_ranges(1, alts.list.len() + 1),
     ).explode("alt", "allele_idx", empty_as_null=False)
+    # VCF bases are case-insensitive, but the encoders of kipoiseq2.encoders are case-sensitive, so ref and the
+    # sequence ALT alleles become uppercase. The other ALT alleles keep their text, e.g. the chromosome of a breakend.
+    alt = pl.col("alt")
+    is_sequence = alt.str.contains(_SEQUENCE_ALT)
     if sequence_alts_only:
-        variants = variants.filter(pl.col("alt").str.contains(_SEQUENCE_ALT))
+        variants = variants.filter(is_sequence).with_columns(alt=alt.str.to_uppercase())
     else:
         # polars-bio gives ALT "." as an empty string
-        variants = variants.with_columns(alt=pl.when(pl.col("alt") != "").then(pl.col("alt")))
+        variants = variants.with_columns(
+            alt=pl.when(is_sequence).then(alt.str.to_uppercase()).when(alt != "").then(alt)
+        )
     variants = variants.select(
         "chrom", "start", "end", "pos", "id", "ref", "alt", "allele_idx", "qual", "filter", *fields
     )
@@ -97,14 +104,16 @@ def scan_vcf_variants(
     ALT alleles that are sequences of bases give a row. The VCF
     specification defines the bases as A, C, G, T and N, in any case. So
     these ALT alleles give no row: a missing ALT (``.``), the ``*`` allele,
-    symbolic ALT alleles such as ``<DEL>``, and breakends. alt keeps the
-    case of the VCF file, and allele_idx counts the dropped ALT alleles too.
+    symbolic ALT alleles such as ``<DEL>``, and breakends. ref and alt are
+    uppercase, so the case-sensitive encoders of :mod:`kipoiseq2.encoders`
+    take them as they are. allele_idx counts the dropped ALT alleles too.
 
     :param path: path of the VCF file.
     :param info_fields: INFO fields to read, e.g. ``["AF"]``.
     :param sequence_alts_only: keep only the ALT alleles that are sequences of
         bases. With False, every ALT allele gives a row, and a missing ALT
-        (``.``) gives a null alt. Use False only for tables: a
+        (``.``) gives a null alt. The ALT alleles that are not sequences of
+        bases keep their text, e.g. ``<DEL>``. Use False only for tables: a
         :class:`~kipoiseq2.dataclasses.Variant` needs a str alt, and
         :class:`~kipoiseq2.extractors.vcf_seq.VariantSeqExtractor` inserts
         symbolic ALT alleles such as ``<DEL>`` as text.
