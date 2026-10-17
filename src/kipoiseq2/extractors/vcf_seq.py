@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 
-from kipoiseq2.dataclasses import Interval, Variant, _check_int
+from kipoiseq2.dataclasses import Interval, Variant, _check_int, _is_reverse
 from kipoiseq2.extractors.base import SequenceExtractor, _chrom_size
 
 __all__ = ["VariantSeqExtractor"]
@@ -200,7 +200,7 @@ class VariantSeqExtractor:
                 )
             seq = seq.replace(_OUTSIDE, "N")
 
-        if self._use_strand and interval.strand == "-":
+        if _is_reverse(interval, use_strand=self._use_strand):
             seq = reverse_complement(seq)
 
         return seq

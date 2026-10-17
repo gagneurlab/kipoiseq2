@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from types import MappingProxyType, TracebackType
 from typing import Self
 
-from kipoiseq2.dataclasses import Interval
+from kipoiseq2.dataclasses import Interval, _is_reverse
 from kipoiseq2.extractors.base import _chrom_size
 
 __all__ = ["FastaStringExtractor"]
@@ -109,7 +109,7 @@ class FastaStringExtractor:
         if interval.start < 0 or interval.end > chrom_size:
             raise ValueError(f"interval {interval} must lie within 0 and {chrom_size}, the length of {interval.chrom}")
         # reverse-complement seq the negative strand
-        rc = self._use_strand and interval.strand == "-"
+        rc = _is_reverse(interval, use_strand=self._use_strand)
 
         # pyfaidx wants a 1-based interval
         return str(self._fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
