@@ -8,7 +8,8 @@ So they are safe as default arguments and in the worker processes of a data load
 
 The lookup is case-sensitive: ``"a"`` and ``"A"`` are different letters.
 So a lowercase letter, e.g. of a soft-masked repeat, is unknown unless the alphabet contains it.
-Uppercase the sequences at the source instead, e.g. with ``seq.upper()`` or ``FastaStringExtractor(force_upper=True)``.
+Uppercase the sequences at the source instead, e.g. with ``seq.upper()``,
+or read them with ``FastaStringExtractor``, which uppercases by default.
 An unknown letter raises a ValueError that names it.
 
 Example:
@@ -90,7 +91,7 @@ def _unknown_letters_error(unknown: set[str], known: Container[str], kind: str, 
     if upper:
         message += (
             f". The lookup is case-sensitive, but {name} has the uppercase forms of {upper}: "
-            "uppercase the sequence with seq.upper(), or read it with FastaStringExtractor(force_upper=True)"
+            "uppercase the sequence with seq.upper(), or read it with FastaStringExtractor, which uppercases by default"
         )
     return ValueError(message)
 
