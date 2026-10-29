@@ -3,18 +3,11 @@ from conftest import sample_5kb_fasta_file
 
 from kipoiseq2.dataclasses import Interval, Variant
 from kipoiseq2.extractors import FastaStringExtractor
-from kipoiseq2.extractors.vcf_seq import VariantSeqExtractor, reverse_complement
+from kipoiseq2.extractors.vcf_seq import VariantSeqExtractor
 
 fasta_file = sample_5kb_fasta_file
 
 intervals = [Interval("chr1", 4, 10), Interval("chr1", 5, 30), Interval("chr1", 20, 30)]
-
-
-def test_reverse_complement():
-    assert reverse_complement("ACGTNacgtn") == "nacgtNACGT"
-    assert reverse_complement("RYKM") == "KMRY"
-    with pytest.raises(ValueError):
-        reverse_complement("AC-GT")
 
 
 @pytest.fixture

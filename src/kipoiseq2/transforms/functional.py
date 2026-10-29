@@ -3,44 +3,33 @@ from collections.abc import Mapping
 
 from kipoiseq2.dataclasses import _Anchor, _check_resize, _resize_bounds
 
+# IUPAC complement, the same table as pyfaidx.complement. The other characters
+# below 256 are deleted, so a length change reveals them.
+_COMPLEMENT_FROM = "ACTGNactgnYRWSKMDVHBXyrwskmdvhbx"
+_COMPLEMENT_TO = "TGACNtgacnRYWSMKHBDVXrywsmkhbdvx"
+_COMPLEMENT = str.maketrans(
+    _COMPLEMENT_FROM, _COMPLEMENT_TO, "".join(chr(c) for c in range(256) if chr(c) not in _COMPLEMENT_FROM)
+)
 
-def rc_dna(seq):
+
+def reverse_complement(seq: str) -> str:
+    """Reverse complement a DNA sequence with IUPAC codes.
+
+    :param seq: DNA sequence. Upper and lower case are kept.
+    :returns: The reverse complement of ``seq``.
+    :raises ValueError: if ``seq`` contains a character without IUPAC complement, e.g. ``U`` or ``-``.
+
+    Example:
+
+    >>> reverse_complement("ACGTNacgtn")
+    'nacgtNACGT'
     """
-    Reverse complement the DNA sequence
-
-    >>> assert rc_dna("TATCG") == "CGATA"
-    >>> assert rc_dna("tatcg") == "cgata"
-    """
-    rc_hash = {
-        "A": "T",
-        "T": "A",
-        "C": "G",
-        "G": "C",
-        "a": "t",
-        "t": "a",
-        "c": "g",
-        "g": "c",
-    }
-    return "".join([rc_hash[s] for s in reversed(seq)])
-
-
-def rc_rna(seq):
-    """
-    Reverse complement the RNA sequence
-
-    >>> assert rc_rna("UAUCG") == "CGAUA"
-    """
-    rc_hash = {
-        "A": "U",
-        "U": "A",
-        "C": "G",
-        "G": "C",
-        "a": "u",
-        "u": "a",
-        "c": "g",
-        "g": "c",
-    }
-    return "".join([rc_hash[s] for s in reversed(seq)])
+    comp = seq.translate(_COMPLEMENT)
+    # the table keeps the characters above 255, so isascii catches them
+    if not seq.isascii() or len(comp) != len(seq):
+        invalid = sorted(set(seq) - set(_COMPLEMENT_FROM))
+        raise ValueError("Sequence contains non-DNA characters: {}".format(invalid))
+    return comp[::-1]
 
 
 # sequence trimming
