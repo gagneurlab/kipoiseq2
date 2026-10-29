@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from typing import Literal
 
 from kipoiseq2.dataclasses import Interval, Variant, _check_int, _is_reverse
 from kipoiseq2.extractors.base import SequenceExtractor, _chrom_size
@@ -184,7 +185,7 @@ class VariantSeqExtractor:
         return seq
 
     @staticmethod
-    def _split(edits: list[_Edit], pos: int, *, keep: str = "both") -> list[_Edit]:
+    def _split(edits: list[_Edit], pos: int, *, keep: Literal["left", "right", "both"] = "both") -> list[_Edit]:
         """Split the variants whose reference range contains ``pos`` at ``pos``.
 
         :param keep: the parts of a split variant to keep: ``"left"``, ``"right"`` or ``"both"``
