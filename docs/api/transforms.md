@@ -1,8 +1,7 @@
-# Class-based transforms
+# Transforms
 
 ```{eval-rst}
-.. automodule:: kipoiseq2.transforms.transforms
+.. automodule:: kipoiseq2.transforms
    :members:
    :undoc-members:
-   :special-members: __call__
 ```

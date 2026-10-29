@@ -112,7 +112,7 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - `one_hot_dna(seq)` becomes `Encoder(DNA, ambiguous="fractional", dtype=np.float32).one_hot(seq)`.
   For the IUPAC ambiguity codes other than `N`, it gives fractions of their bases, e.g. `[0.5, 0, 0.5, 0]` for `R`, where `one_hot_dna` gave rows of zeros.
   `one_hot_dna(seq, neutral_alphabet="NRY")` becomes `Encoder(Alphabet(DNA.letters, ambiguous=dict.fromkeys("NRY", DNA.letters)), ambiguous="fractional", dtype=np.float32).one_hot(seq)`.
-- `OneHot(...)(seq)` becomes `Encoder(...).one_hot(seq)`. In a `Compose`, pass the method, e.g. `Compose([Encoder().one_hot, DummyAxis(0)])`.
+- `OneHot(...)(seq)` becomes `Encoder(...).one_hot(seq)`. Where a callable is needed, pass the method `Encoder(...).one_hot`.
 - `tokenize(seq, alphabet, neutral_alphabet)` becomes `Tokenizer(Alphabet(alphabet, ambiguous=dict.fromkeys(neutral_alphabet, alphabet))).tokenize(seq)`.
   It returns uint8 instead of int64 by default. Pass `dtype=np.int64` for int64.
 - `Tokenizer` gives each ambiguity code a token of its own after the letters, instead of `-1` for every neutral letter.
@@ -173,13 +173,9 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   `anchor="start"` keeps the 5' end, which is `end` on "-" intervals, unless `use_strand=False`.
   `use_strand` is keyword-only. A negative `width` raises a ValueError, and `width=None` a TypeError.
   In 0.1, a negative `width` gave an interval with `start` greater than `end`, and `width=None` a copy.
-- `ResizeInterval(width, *, anchor="center", use_strand=True)` calls `Interval.resize`, so the anchors `"start"` and `"end"` follow the strand.
-  For the 0.1 behavior of these anchors, pass `use_strand=False`.
-  `anchor` is keyword-only. `ResizeInterval` checks `width` and `anchor` when it is created.
-  In 0.1, it raised an Exception for an invalid `anchor` at the first call, and a negative `width` gave intervals with `start` greater than `end`.
 - `Interval.slop` follows the strand: on "-" intervals, `upstream` now moves `end` and `downstream` moves `start`.
   "+" and "." intervals are unchanged. For the old behavior, pass `use_strand=False`.
-- `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms.functional` trims a sequence to a length.
+- `Interval.trim(i, j)` becomes `Interval.slice(i, j)`, because `trim` of `kipoiseq2.transforms` trims a sequence to a length.
   `use_strand` is keyword-only. `slice` raises a ValueError unless `0 <= i < j <= interval.width`.
   In 0.1, `trim` raised an AssertionError if `j <= i`, and returned a longer interval if `j > interval.width`.
 - `pad`, `trim` and `fixed_len` take only a str as `seq` and as `value`. In 0.1, they also took lists.
@@ -228,7 +224,7 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
   In 0.1, it moved an anchor outside the interval to the nearest end of the interval.
 - `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` no longer take `use_strand`.
   Create the extractor with the `use_strand` you need instead.
-- `rc_dna(seq)` becomes `reverse_complement(seq)` from `kipoiseq2.transforms.functional`.
+- `rc_dna(seq)` becomes `reverse_complement(seq)` from `kipoiseq2.transforms`.
   `reverse_complement` also takes the IUPAC codes, e.g. N, and raises ValueError instead of KeyError for other characters.
 - `rc_rna(seq)` is gone. For an RNA sequence in upper case, use `reverse_complement(seq.replace("U", "T")).replace("T", "U")`.
 - `kipoiseq2.utils.parse_dtype` is gone, because it called `eval()` on strings, and only `ReorderedOneHot` used it.
@@ -273,3 +269,18 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - A null strand in `intervals` gives the strand `"."` in the pairs, as a missing strand column.
 - With `scan_vcf_variants(path)` as `variants`, the pairs keep all its columns, e.g. `variant_qual` and `variant_filter`.
   `vcf_file` kept only the coordinates, `variant_ref`, `variant_alt` and `variant_allele_idx`.
+- `translate` takes `transl_table` and `transl_except` only as keyword arguments: `translate(seq, 2)` becomes `translate(seq, transl_table=2)`.
+- `translate` raises a ValueError that names the codons that are not in the genetic code, e.g. `ATN`, instead of a KeyError.
+  The lookup stays case-sensitive, so a lowercase codon such as `atg` raises this ValueError too, and the message hints at `seq.upper()`.
+  It raises a TypeError instead of a ValueError if a position in `transl_except` is not an int or an amino acid is not a str.
+- `TRANSLATION_TABLE` is read-only. In 0.1, it was a dict, and changing it changed the result of `translate` with `transl_table` 1 and 11.
+  For a table that you can change, use `dict(TRANSLATION_TABLE)`.
+- The transform classes `Compose`, `DummyAxis`, `SwapAxes` and `ResizeInterval` are gone, because they only wrapped functions for the configs of the Kipoi dataloaders.
+  They have these replacements:
+  - `DummyAxis(axis)(x)` becomes `np.expand_dims(x, axis)`.
+  - `SwapAxes(axis1, axis2)(x)` becomes `np.swapaxes(x, axis1, axis2)`.
+  - `ResizeInterval(width, anchor)(interval)` becomes `interval.resize(width, anchor=anchor)`.
+    For the 0.1 behavior of the anchors `"start"` and `"end"`, pass `use_strand=False`, as for `resize_interval`.
+  - `Compose([f, g])` becomes a function that calls the steps in order, e.g. `lambda x: g(f(x))`.
+- The functions and constants of `kipoiseq2.transforms.functional` moved to the module `kipoiseq2.transforms`, and `kipoiseq2.transforms.functional` is gone.
+  For example, `from kipoiseq2.transforms.functional import translate` becomes `from kipoiseq2.transforms import translate`.
