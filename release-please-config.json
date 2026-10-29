@@ -5,6 +5,7 @@
   "packages": {
     ".": {
       "release-type": "python",
+      "bump-minor-pre-major": true,
       "package-name": "kipoiseq2",
       "include-component-in-tag": false,
       "include-v-in-tag": true
