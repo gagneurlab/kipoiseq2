@@ -219,9 +219,53 @@ def test_scan_vcf_genotypes_all_rows(edge_case_vcf):
     assert df.filter((pl.col("pos") == 40) & (pl.col("sample") == "S3")).select("GT", "carrier").row(0) == (None, False)
 
 
-def test_scan_vcf_genotypes_alt_kinds(alt_kinds_vcf):
-    df = scan_vcf_genotypes(alt_kinds_vcf).collect()
-    # for the ALT alleles A,<DEL>,C, S1 with GT 2/3 carries C, and S2 with GT 0/1 carries A
+def test_scan_vcf_genotypes_haplotypes(edge_case_vcf):
+    df = scan_vcf_genotypes(edge_case_vcf, haplotypes=True).collect()
+    assert df.select("pos", "alt", "sample", "haplotype", "GT").rows() == [
+        (10, "C", "S2", 0, "1|1"),
+        (10, "C", "S2", 1, "1|1"),
+        # haplotype 1 of 0/2 carries the second ALT allele
+        (10, "G", "S1", 1, "0/2"),
+        (40, "N", "S1", 1, "0/1"),
+        # haploid
+        (5, "T", "S1", 0, "1"),
+        # the missing allele keeps its position in GT
+        (5, "T", "S3", 1, ".|1"),
+        # unphased: the order in GT sets the haplotype
+        (5, "TAA", "S2", 1, "3/2"),
+        (5, "N", "S2", 0, "3/2"),
+    ]
+    assert df["carrier"].all()
+    # the carriers per sample are the carriers per haplotype without haplotype
+    per_sample = scan_vcf_genotypes(edge_case_vcf).collect()
+    assert df.drop("haplotype").unique(maintain_order=True).equals(per_sample)
+
+
+def test_scan_vcf_genotypes_haplotypes_all_rows(edge_case_vcf):
+    df = scan_vcf_genotypes(edge_case_vcf, format_fields=["GQ", "AD"], carriers_only=False, haplotypes=True).collect()
+    assert df.columns[10:] == ["sample", "haplotype", "GT", "GQ", "AD", "carrier"]
+    assert df.schema["haplotype"] == pl.Int64
+    # the ALT alleles C and G of 3 diploid samples, N of 2 diploid samples and 1 missing GT,
+    # and T, TAA and N of 1 haploid and 2 diploid samples
+    assert df.height == 2 * 3 * 2 + (2 * 2 + 1) + 3 * (1 + 2 * 2)
+    assert df.filter(pl.col("alt") == "C").select("sample", "haplotype", "GT", "GQ", "carrier").rows() == [
+        ("S1", 0, "0/2", 30, False),
+        ("S1", 1, "0/2", 30, False),
+        ("S2", 0, "1|1", 20, True),
+        ("S2", 1, "1|1", 20, True),
+        ("S3", 0, "./.", None, False),
+        ("S3", 1, "./.", None, False),
+    ]
+    # a missing GT gives one row with a null haplotype
+    missing = df.filter((pl.col("pos") == 40) & (pl.col("sample") == "S3"))
+    assert missing.select("haplotype", "GT", "carrier").rows() == [(None, None, False)]
+
+
+@pytest.mark.parametrize("haplotypes", [False, True])
+def test_scan_vcf_genotypes_alt_kinds(alt_kinds_vcf, haplotypes):
+    df = scan_vcf_genotypes(alt_kinds_vcf, haplotypes=haplotypes).collect()
+    # for the ALT alleles A,<DEL>,C, S1 with GT 2/3 carries C, and S2 with GT 0/1 carries A.
+    # Each carrier has one haplotype with the ALT allele, so haplotypes=True gives the same rows.
     assert df.select("pos", "alt", "allele_idx", "sample", "GT").rows() == [
         (2, "A", 1, "S1", "0/1"),
         (4, "ACG", 1, "S1", "0/1"),
@@ -262,16 +306,18 @@ def test_scan_vcf_genotypes_keyword_only(edge_case_vcf):
         scan_vcf_genotypes(edge_case_vcf, use_zero_based=False)
 
 
-def test_scan_vcf_genotypes_samples(edge_case_vcf, tmp_path):
-    s2 = scan_vcf_genotypes(edge_case_vcf, samples=["S2"], format_fields=["GQ", "AD"], carriers_only=False).collect()
-    all_samples = scan_vcf_genotypes(edge_case_vcf, format_fields=["GQ", "AD"], carriers_only=False).collect()
+@pytest.mark.parametrize("haplotypes", [False, True])
+def test_scan_vcf_genotypes_samples(edge_case_vcf, tmp_path, haplotypes):
+    options = {"format_fields": ["GQ", "AD"], "carriers_only": False, "haplotypes": haplotypes}
+    s2 = scan_vcf_genotypes(edge_case_vcf, samples=["S2"], **options).collect()
+    all_samples = scan_vcf_genotypes(edge_case_vcf, **options).collect()
     assert s2.equals(all_samples.filter(pl.col("sample") == "S2"))
 
     # polars-bio returns the FORMAT fields of a single-sample VCF as columns instead of a struct
     lines = [line.split("\t") for line in EDGE_CASE_VCF.splitlines()]
     single_sample_vcf = tmp_path / "single_sample.vcf"
     single_sample_vcf.write_text("".join("\t".join(line[:9] + line[10:11]) + "\n" for line in lines))
-    single = scan_vcf_genotypes(str(single_sample_vcf), format_fields=["GQ", "AD"], carriers_only=False).collect()
+    single = scan_vcf_genotypes(str(single_sample_vcf), **options).collect()
     assert single.equals(s2)
 
 

@@ -20,4 +20,8 @@
 .. automodule:: kipoiseq2.extractors.vcf_matching
    :members:
    :undoc-members:
+
+.. automodule:: kipoiseq2.extractors.batches
+   :members:
+   :undoc-members:
 ```

@@ -1,3 +1,4 @@
+import itertools
 from collections.abc import Iterable
 from typing import Literal
 
@@ -16,7 +17,8 @@ _Edit = tuple[int, int, str]
 _Piece = tuple[int, int] | str
 """A part of the result: a reference range ``(start, end)``, 0-based and half-open, or an ALT sequence.
 
-Overlapping variants can give a range whose ``start`` is greater than its ``end``. It stands for no bases.
+A variant that spans an end of the sequence can give a range whose ``start`` is greater than its ``end``.
+It stands for no bases.
 """
 
 
@@ -76,6 +78,7 @@ class VariantSeqExtractor:
         :param interval: the region of the sequence
         :param variants: the variants to apply, on the chromosome of ``interval``.
             Variants whose REF does not overlap ``interval`` have no effect.
+            Two variants must not overlap: their REF must not share a base.
         :param anchor_pos: None, or a 0-based position from ``interval.start`` to ``interval.end``.
             If None, the length of the sequence follows the variants.
             Otherwise the sequence has the width of ``interval``, anchored at ``anchor_pos`` as described above.
@@ -90,7 +93,7 @@ class VariantSeqExtractor:
         :raises ValueError: if ``anchor_pos`` lies outside ``interval``,
             if ``interval.chrom`` is not in ``reference.chrom_sizes``,
             if a variant lies on another chromosome than ``interval`` or outside the chromosome,
-            if the REF of a variant differs from the reference, ignoring case,
+            if two variants overlap, if the REF of a variant differs from the reference, ignoring case,
             or if the sequence needs bases outside the chromosome and ``pad_with_n`` is False
         """
         if not isinstance(interval, Interval):
@@ -111,6 +114,10 @@ class VariantSeqExtractor:
                 raise ValueError(f"variant {v} lies on another chromosome than the interval {interval}")
             if v.start < 0 or v.end > chrom_size:
                 raise ValueError(f"variant {v} lies outside {v.chrom}, which has {chrom_size} bases")
+        # sorted by start, two variants overlap only if two neighbors overlap
+        for v1, v2 in itertools.pairwise(sorted(variants, key=lambda v: v.start)):
+            if v2.start < v1.end:
+                raise ValueError(f"variants {v1} and {v2} overlap, but the REF of two variants must not share a base")
 
         edits = [(v.start, v.end, v.alt) for v in variants]
         if anchor_pos is None:

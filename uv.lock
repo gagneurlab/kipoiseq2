@@ -492,6 +492,7 @@ dependencies = [
 ranges = [
     { name = "polars" },
     { name = "polars-bio" },
+    { name = "pyarrow" },
 ]
 
 [package.dev-dependencies]
@@ -521,6 +522,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "polars", marker = "extra == 'ranges'", specifier = ">=1.37.1" },
     { name = "polars-bio", marker = "extra == 'ranges'", specifier = ">=0.31" },
+    { name = "pyarrow", marker = "extra == 'ranges'" },
     { name = "pyfaidx" },
 ]
 provides-extras = ["ranges"]
