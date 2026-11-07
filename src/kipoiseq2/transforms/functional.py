@@ -1,31 +1,5 @@
 import string
-from typing import Any, Mapping, Sequence
-
-import numpy as np
-
-from kipoiseq2.utils import DNA
-
-# sequence -> array
-
-
-def _get_alphabet_dict(alphabet):
-    return {letter: i for i, letter in enumerate(alphabet)}
-
-
-def _get_index_dict(alphabet):
-    return {i: letter for i, letter in enumerate(alphabet)}
-
-
-def one_hot2token(arr):
-    return arr.argmax(axis=2)
-
-
-def one_hot2string(arr, alphabet=DNA):
-    """Convert a one-hot encoded array back to string"""
-    tokens = one_hot2token(arr)
-    indexToLetter = _get_index_dict(alphabet)
-
-    return ["".join([indexToLetter[x] for x in row]) for row in tokens]
+from collections.abc import Mapping
 
 
 def rc_dna(seq):
@@ -65,68 +39,6 @@ def rc_rna(seq):
         "g": "c",
     }
     return "".join([rc_hash[s] for s in reversed(seq)])
-
-
-def tokenize(seq, alphabet=DNA, neutral_alphabet=["N"]):
-    """Convert sequence to integers
-
-    :param seq: Sequence to encode
-    :param alphabet: Alphabet to use
-    :param neutral_alphabet: Neutral alphabet -> assign those values to -1
-    :returns: List of length ``len(seq)`` with integers from ``-1`` to ``len(alphabet) - 1``
-    """
-    # Req: all alphabets have the same length
-    if isinstance(neutral_alphabet, str):
-        neutral_alphabet = [neutral_alphabet]
-
-    nchar = len(alphabet[0])
-    for letter in (*alphabet, *neutral_alphabet):
-        assert len(letter) == nchar
-    assert len(seq) % nchar == 0  # since we are using striding
-
-    alphabet_dict = _get_alphabet_dict(alphabet)
-    for letter in neutral_alphabet:
-        alphabet_dict[letter] = -1
-    # current performance bottleneck
-    return np.array([alphabet_dict[seq[(i * nchar) : ((i + 1) * nchar)]] for i in range(len(seq) // nchar)])
-
-
-def token2one_hot(tokens, alphabet_size=4, neutral_value=0.25, dtype=None):
-    """
-    .. note::
-       everything out of the alphabet is transformed into ``np.zeros(alphabet_size)``
-    """
-    arr = np.zeros((len(tokens), alphabet_size), dtype=dtype)
-
-    tokens_range = np.arange(len(tokens), dtype=int)
-    arr[tokens_range[tokens >= 0], tokens[tokens >= 0]] = 1
-    if neutral_value != 0:
-        arr[tokens_range[tokens < 0], :] = neutral_value
-    return arr
-
-
-def one_hot(seq, alphabet=DNA, neutral_alphabet=["N"], neutral_value=0.25, dtype=None):
-    if not isinstance(seq, str):
-        raise ValueError("seq needs to be a string")
-    return token2one_hot(tokenize(seq, alphabet, neutral_alphabet), len(alphabet), neutral_value, dtype=dtype)
-
-
-# Reference: https://github.com/deepmind/deepmind-research/blob/fa8c9be4bb0cfd0b8492203eb2a9f31ef995633c/enformer/enformer.py#L306-L318
-def one_hot_dna(
-    seq: str, alphabet: Sequence[str] = DNA, neutral_alphabet: str = "N", neutral_value: Any = 0.25, dtype=np.float32
-) -> np.ndarray:
-    """One-hot encode sequence."""
-    if not isinstance(seq, str):
-        raise ValueError("sequence needs to be a string")
-
-    def to_uint8(string):
-        return np.frombuffer(string.encode("ascii"), dtype=np.uint8)
-
-    hash_table = np.zeros((np.iinfo(np.uint8).max, len(alphabet)), dtype=dtype)
-    hash_table[to_uint8("".join(alphabet))] = np.eye(len(alphabet), dtype=dtype)
-    hash_table[to_uint8("".join(neutral_alphabet))] = neutral_value
-    hash_table = hash_table.astype(dtype)
-    return hash_table[to_uint8(seq)]
 
 
 # sequence trimming
