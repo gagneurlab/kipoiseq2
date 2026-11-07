@@ -29,23 +29,13 @@ def test_variant():
     v = Variant("chr1", 10, "C", "T")
 
     assert v.start == 9
+    assert v.end == 10
     assert v.chrom == "chr1"
     assert v.pos == 10
     assert v.ref == "C"
     assert v.alt == "T"
-    assert isinstance(v.info, dict)
-    assert len(v.info) == 0
-    assert v.qual == 0
-    assert v.filter == "PASS"
-    v.info["test"] = 10
-    assert v.info["test"] == 10
     assert isinstance(str(v), str)
-
-    # make sure the original got unchangd
-    v2 = v.copy()
-    v.info["test"] = 20
-    assert v2.info["test"] == 10
-    v.__repr__()
+    assert repr(v) == "Variant(chrom='chr1', pos=10, ref='C', alt='T')"
 
     # __str__, from_str
     assert v == Variant.from_str(str(v))
@@ -54,23 +44,51 @@ def test_variant():
     assert isinstance(hash(v), int)
     assert hash(v) == hash(Variant.from_str(str(v)))
 
-    # fixed arguments
-    with pytest.raises(AttributeError):
-        v.chrom = "asd"
-    with pytest.raises(AttributeError):
-        v.pos = 10
-    with pytest.raises(AttributeError):
-        v.ref = "asd"
-    with pytest.raises(AttributeError):
-        v.alt = "asd"
+    # the fields are read-only
+    for field_name in ["chrom", "pos", "ref", "alt", "start", "end"]:
+        with pytest.raises(AttributeError):
+            setattr(v, field_name, None)
+    # the VCF columns other than CHROM, POS, REF and ALT stay in the frame of scan_vcf_variants
+    for field_name in ["id", "qual", "filter", "info"]:
+        assert not hasattr(v, field_name)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        v.id = "rs1"
 
-    # non-fixed arguments
-    v.id = "asd"
-    v.qual = 10
-    v.filter = "asd"
-    v.source = 2
 
-    assert isinstance(Variant("chr1", "10", "C", "T").pos, int)
+def test_variant_takes_only_the_4_fields():
+    with pytest.raises(TypeError):
+        Variant("chr1", 10, "C", "T", "rs1")
+    with pytest.raises(TypeError):
+        Variant("chr1", 10, "C", "T", id="rs1")
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"chrom": 1},
+        {"pos": "10"},
+        {"pos": 10.0},
+        {"pos": True},
+        {"ref": None},
+        {"alt": None},
+    ],
+    ids=lambda kwargs: next(iter(kwargs)),
+)
+def test_variant_wrong_type(kwargs):
+    with pytest.raises(TypeError, match=next(iter(kwargs))):
+        Variant(**{"chrom": "chr1", "pos": 10, "ref": "C", "alt": "T", **kwargs})
+
+
+@pytest.mark.parametrize("pos, ref", [(0, "C"), (-1, "C"), (10, "")])
+def test_variant_wrong_value(pos, ref):
+    with pytest.raises(ValueError):
+        Variant("chr1", pos, ref, "T")
+
+
+def test_variant_numpy_pos():
+    v = Variant("chr1", np.int64(10), "C", "T")
+    assert type(v.pos) is int
+    assert v == Variant("chr1", 10, "C", "T")
 
 
 @pytest.mark.parametrize("other", ["chr1:10:C>T", None, 1, Interval("chr1", 9, 10)])
@@ -81,10 +99,17 @@ def test_variant_eq_other_types(other):
 
 
 def test_variant_eq_same_attributes():
-    # objects with the same attributes, e.g. a kipoiseq Variant, compare by attributes
+    # an object with the same attributes, e.g. a kipoiseq Variant, is not equal
     v = Variant("chr1", 10, "C", "T")
-    assert v == SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="T")
-    assert v != SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="G")
+    assert v != SimpleNamespace(chrom="chr1", pos=10, ref="C", alt="T")
+
+
+def test_variant_pickle_and_copy():
+    v = Variant("chr1", 10, "C", "T")
+    copies = [pickle.loads(pickle.dumps(v, protocol)) for protocol in range(pickle.HIGHEST_PROTOCOL + 1)]
+    for v2 in [*copies, copy.copy(v), copy.deepcopy(v)]:
+        assert v2 == v
+        assert hash(v2) == hash(v)
 
 
 def test_interval():

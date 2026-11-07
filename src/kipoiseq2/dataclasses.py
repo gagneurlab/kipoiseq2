@@ -3,103 +3,72 @@
 import numbers
 import re
 from collections.abc import Iterator, Mapping
-from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal, Optional, cast, get_args
+from typing import Any, Literal, cast, get_args
 
 
+@dataclass(frozen=True, init=False)
 class Variant:
-    """Variant container.
+    """A variant with one ALT allele, as in a VCF record.
 
     See also VCF file definition: http://samtools.github.io/hts-specs/VCFv4.3.pdf
 
-    .. note::
-       this class doesn't hold the genotype information.
+    A Variant is immutable. The constructor checks the fields once.
+    Two variants are equal if all their fields are equal.
+    The other columns of a VCF record, such as ID, QUAL, FILTER and INFO,
+    stay in the frame of :func:`~kipoiseq2.extractors.vcf.scan_vcf_variants`.
 
     :param chrom: CHROM field in the VCF
-    :param pos: POS field in the VCF
+    :param pos: POS field in the VCF, 1-based
     :param ref: REF field in the VCF
-    :param alt: ALT field in the VCF
-    :param id: ID field in the VCF
-    :param qual: QUAL field in the VCF
-    :param filter: FILTER field in the VCF
-    :param info: INFO field in the VCF
-    :param source: reference to the original source object from which this
-        Variant object was created
+    :param alt: one ALT allele of the ALT field in the VCF
+    :raises TypeError: if ``chrom``, ``ref`` or ``alt`` is not a str, or if ``pos`` is not an int
+    :raises ValueError: if ``pos`` is less than 1 or ``ref`` is empty
+
+    Example:
+
+    >>> variant = Variant("chr1", 10, "C", "T")
+    >>> variant.start, variant.end
+    (9, 10)
+    >>> str(variant)
+    'chr1:10:C>T'
     """
 
-    def __init__(
-        self,
-        chrom: str,
-        pos: int,  # 1-based
-        ref: str,
-        alt: str,
-        id: str = "",
-        qual: float = 0,
-        filter: str = "PASS",
-        info: Optional[dict] = None,
-        source=None,
-    ):
-        # main 4 attributes
-        # these should be immutable by default to not
-        # run into any strange issues downstream.
-        self._chrom = str(chrom)
-        self._pos = int(pos)
-        self._ref = str(ref)
-        self._alt = str(alt)
+    chrom: str
+    pos: int
+    ref: str
+    alt: str
 
-        # other 4 main VCF attributes
-        self.id = id
-        self.qual = qual
-        self.filter = filter
-        self.info = info or dict()
-
-        # additional attribute implemented by this class
-        self.source = source
-
-    def copy(self):
-        return deepcopy(self)
-
-    @property
-    def chrom(self):
-        return self._chrom
-
-    @property
-    def pos(self):
-        return self._pos
-
-    @property
-    def ref(self):
-        return self._ref
-
-    @property
-    def alt(self):
-        return self._alt
+    def __init__(self, chrom: str, pos: int, ref: str, alt: str) -> None:
+        for value, field_name in ((chrom, "chrom"), (ref, "ref"), (alt, "alt")):
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be a str, not {type(value).__name__}")
+        _check_int(pos, "pos")
+        if pos < 1:
+            raise ValueError(f"pos must be 1 or more, got {pos}")
+        if not ref:
+            raise ValueError("ref must not be empty")
+        # the dataclass is frozen, so the fields are set with object.__setattr__
+        object.__setattr__(self, "chrom", chrom)
+        object.__setattr__(self, "pos", int(pos))
+        object.__setattr__(self, "ref", ref)
+        object.__setattr__(self, "alt", alt)
 
     # convenience properties
     @property
-    def start(self):
+    def start(self) -> int:
         """0-based variant start position"""
         return self.pos - 1
 
     @property
-    def end(self):
+    def end(self) -> int:
         """0-based, exclusive variant end position: ``start + len(ref)``.
 
         This equals the 1-based position of the last REF base.
         """
         return self.start + len(self.ref)
 
-    def __eq__(self, obj):
-        try:
-            return self.chrom == obj.chrom and self.pos == obj.pos and self.ref == obj.ref and self.alt == obj.alt
-        except AttributeError:
-            return NotImplemented
-
-    def __hash__(self):
-        return hash((self.chrom, self.pos, self.ref, self.alt))
-
-    def __str__(self):
+    def __str__(self) -> str:
         return "{}:{}:{}>{}".format(self.chrom, self.pos, self.ref, self.alt)
 
     @classmethod
@@ -107,11 +76,6 @@ class Variant:
         chrom, pos, ref_alt = s.split(":")
         ref, alt = ref_alt.split(">")
         return cls(chrom=chrom, pos=int(pos), ref=ref, alt=alt)
-
-    def __repr__(self):
-        return "Variant(chrom='{}', pos={}, ref='{}', alt='{}', id='{}',...)".format(
-            self.chrom, self.pos, self.ref, self.alt, self.id
-        )
 
 
 class _ReadOnlyDict(Mapping[str, Any]):
