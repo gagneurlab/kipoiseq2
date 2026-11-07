@@ -5,7 +5,7 @@ from typing import Self
 
 from kipoiseq2.dataclasses import Interval, _is_reverse
 from kipoiseq2.extractors.base import _chrom_size
-from kipoiseq2.transforms.functional import reverse_complement
+from kipoiseq2.transforms import reverse_complement
 
 __all__ = ["FastaStringExtractor"]
 

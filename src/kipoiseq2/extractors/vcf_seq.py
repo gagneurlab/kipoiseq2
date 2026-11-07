@@ -2,7 +2,7 @@ from collections.abc import Iterable
 
 from kipoiseq2.dataclasses import Interval, Variant, _check_int, _is_reverse
 from kipoiseq2.extractors.base import SequenceExtractor, _chrom_size
-from kipoiseq2.transforms.functional import reverse_complement
+from kipoiseq2.transforms import reverse_complement
 
 __all__ = ["VariantSeqExtractor"]
 
