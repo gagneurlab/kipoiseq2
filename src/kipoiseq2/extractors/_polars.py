@@ -1,7 +1,9 @@
 """Import polars and polars-bio, the optional dependencies of the ``ranges`` extra."""
 
+from types import ModuleType
 
-def _import_polars():
+
+def _import_polars() -> tuple[ModuleType, ModuleType]:
     try:
         import polars as pl
         import polars_bio as pb

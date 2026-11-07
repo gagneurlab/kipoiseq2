@@ -3,7 +3,7 @@
 import numbers
 import re
 from dataclasses import dataclass, replace
-from typing import Literal, cast, get_args
+from typing import Literal, SupportsIndex, cast, get_args
 
 
 @dataclass(frozen=True, init=False)
@@ -13,6 +13,7 @@ class Variant:
     See also VCF file definition: http://samtools.github.io/hts-specs/VCFv4.3.pdf
 
     A Variant is immutable. The constructor checks the fields once.
+    It also accepts a numpy integer for ``pos``, and stores it as an int.
     Two variants are equal if all their fields are equal.
     The other columns of a VCF record, such as ID, QUAL, FILTER and INFO,
     stay in the frame of :func:`~kipoiseq2.extractors.vcf.scan_vcf_variants`.
@@ -38,18 +39,19 @@ class Variant:
     ref: str
     alt: str
 
-    def __init__(self, chrom: str, pos: int, ref: str, alt: str) -> None:
+    def __init__(self, chrom: str, pos: SupportsIndex, ref: str, alt: str) -> None:
         for value, field_name in ((chrom, "chrom"), (ref, "ref"), (alt, "alt")):
             if not isinstance(value, str):
                 raise TypeError(f"{field_name} must be a str, not {type(value).__name__}")
         _check_int(pos, "pos")
+        pos = int(pos)
         if pos < 1:
             raise ValueError(f"pos must be 1 or more, got {pos}")
         if not ref:
             raise ValueError("ref must not be empty")
         # the dataclass is frozen, so the fields are set with object.__setattr__
         object.__setattr__(self, "chrom", chrom)
-        object.__setattr__(self, "pos", int(pos))
+        object.__setattr__(self, "pos", pos)
         object.__setattr__(self, "ref", ref)
         object.__setattr__(self, "alt", alt)
 
@@ -119,7 +121,7 @@ def _center(start: int, end: int, *, reverse: bool) -> int:
     return (start + end) // 2 if reverse else (start + end + 1) // 2
 
 
-def _resize_bounds(start: int, end: int, width: int, anchor: str, *, reverse: bool) -> tuple[int, int]:
+def _resize_bounds(start: int, end: int, width: int, anchor: _Anchor, *, reverse: bool) -> tuple[int, int]:
     """Return the start and end of the range from ``start`` to ``end``, resized like :meth:`Interval.resize`.
 
     :param reverse: if True, resize like a "-" interval, and if False, like a "+" interval
@@ -146,6 +148,7 @@ class Interval:
 
     An Interval is immutable. The constructor checks the fields once,
     and methods such as :meth:`resize` return a new Interval.
+    The constructor also accepts numpy integers for ``start`` and ``end``, and stores them as int.
     Two intervals are equal if all their fields are equal.
 
     :param chrom: chromosome
@@ -172,8 +175,8 @@ class Interval:
     def __init__(
         self,
         chrom: str,
-        start: int,
-        end: int,
+        start: SupportsIndex,
+        end: SupportsIndex,
         *,
         strand: _Strand = ".",
     ) -> None:
@@ -182,14 +185,15 @@ class Interval:
                 raise TypeError(f"{field_name} must be a str, not {type(value).__name__}")
         _check_int(start, "start")
         _check_int(end, "end")
+        start, end = int(start), int(end)
         if start > end:
             raise ValueError(f"start must not be greater than end, got start={start}, end={end}")
         if strand not in _STRANDS:
             raise ValueError(f'strand must be "+", "-" or ".", got {strand!r}')
         # the dataclass is frozen, so the fields are set with object.__setattr__
         object.__setattr__(self, "chrom", chrom)
-        object.__setattr__(self, "start", int(start))
-        object.__setattr__(self, "end", int(end))
+        object.__setattr__(self, "start", start)
+        object.__setattr__(self, "end", end)
         object.__setattr__(self, "strand", strand)
 
     @property
