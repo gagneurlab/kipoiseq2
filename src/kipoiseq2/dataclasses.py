@@ -2,9 +2,8 @@
 
 import numbers
 import re
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field, replace
-from typing import Any, Literal, cast, get_args
+from dataclasses import dataclass, replace
+from typing import Literal, cast, get_args
 
 
 @dataclass(frozen=True, init=False)
@@ -78,33 +77,6 @@ class Variant:
         return cls(chrom=chrom, pos=int(pos), ref=ref, alt=alt)
 
 
-class _ReadOnlyDict(Mapping[str, Any]):
-    """Read-only copy of a mapping, for :attr:`Interval.attrs`.
-
-    Unlike a ``types.MappingProxyType``, it can be pickled and deep-copied, e.g. by ``dataclasses.asdict``.
-    """
-
-    __slots__ = ("_data",)
-
-    def __init__(self, data: Mapping[str, Any]) -> None:
-        self._data = dict(data)
-
-    def __getitem__(self, key: str) -> Any:
-        return self._data[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def __repr__(self) -> str:
-        return repr(self._data)
-
-    def __reduce__(self) -> tuple[type["_ReadOnlyDict"], tuple[dict[str, Any]]]:
-        return _ReadOnlyDict, (self._data,)
-
-
 _Strand = Literal["+", "-", "."]
 """Type of the strand of an :class:`Interval`, with ``"."`` for an unknown strand."""
 _STRANDS = get_args(_Strand)
@@ -175,31 +147,27 @@ class Interval:
     An Interval is immutable. The constructor checks the fields once,
     and methods such as :meth:`resize` return a new Interval.
     Two intervals are equal if all their fields are equal.
-    The hash leaves out ``attrs``, so an Interval with any ``attrs`` can be a dict key.
 
     :param chrom: chromosome
     :param start: 0-based start position (inclusive). It may be negative, e.g. after :meth:`shift`.
     :param end: 0-based end position (exclusive), at least ``start``
     :param strand: ``"+"``, ``"-"`` or ``"."`` for an unknown strand
-    :param attrs: additional attributes, e.g. a name or a score. The interval keeps a read-only copy.
-    :raises TypeError: if ``chrom`` or ``strand`` is not a str, if ``start`` or ``end`` is not an int,
-        or if ``attrs`` is not a mapping
+    :raises TypeError: if ``chrom`` or ``strand`` is not a str, or if ``start`` or ``end`` is not an int
     :raises ValueError: if ``start`` is greater than ``end``, or if ``strand`` is not ``"+"``, ``"-"`` or ``"."``
 
     Example:
 
-    >>> interval = Interval("chr1", 10, 20, strand="-", attrs={"gene_id": "g1"})
+    >>> interval = Interval("chr1", 10, 20, strand="-")
     >>> interval.width
     10
     >>> interval.shift(5)
-    Interval(chrom='chr1', start=5, end=15, strand='-', attrs={'gene_id': 'g1'})
+    Interval(chrom='chr1', start=5, end=15, strand='-')
     """
 
     chrom: str
     start: int
     end: int
     strand: _Strand
-    attrs: Mapping[str, Any] = field(hash=False)
 
     def __init__(
         self,
@@ -208,17 +176,12 @@ class Interval:
         end: int,
         *,
         strand: _Strand = ".",
-        attrs: Mapping[str, Any] | None = None,
     ) -> None:
         for value, field_name in ((chrom, "chrom"), (strand, "strand")):
             if not isinstance(value, str):
                 raise TypeError(f"{field_name} must be a str, not {type(value).__name__}")
         _check_int(start, "start")
         _check_int(end, "end")
-        if attrs is None:
-            attrs = {}
-        elif not isinstance(attrs, Mapping):
-            raise TypeError(f"attrs must be a mapping, not {type(attrs).__name__}")
         if start > end:
             raise ValueError(f"start must not be greater than end, got start={start}, end={end}")
         if strand not in _STRANDS:
@@ -228,7 +191,6 @@ class Interval:
         object.__setattr__(self, "start", int(start))
         object.__setattr__(self, "end", int(end))
         object.__setattr__(self, "strand", strand)
-        object.__setattr__(self, "attrs", _ReadOnlyDict(attrs))
 
     @property
     def width(self) -> int:
@@ -258,7 +220,7 @@ class Interval:
         Example:
 
         >>> Interval("chr1", 10, 20, strand="-").shift(5)
-        Interval(chrom='chr1', start=5, end=15, strand='-', attrs={})
+        Interval(chrom='chr1', start=5, end=15, strand='-')
         """
         _check_int(offset, "offset")
         if _is_reverse(self, use_strand=use_strand):
@@ -333,9 +295,9 @@ class Interval:
 
         >>> interval = Interval("chr1", 10, 20, strand="-")
         >>> interval.resize(4, anchor="start")
-        Interval(chrom='chr1', start=16, end=20, strand='-', attrs={})
+        Interval(chrom='chr1', start=16, end=20, strand='-')
         >>> interval.resize(4, anchor="start", use_strand=False)
-        Interval(chrom='chr1', start=10, end=14, strand='-', attrs={})
+        Interval(chrom='chr1', start=10, end=14, strand='-')
         """
         _check_resize(width, anchor)
         start, end = _resize_bounds(
@@ -357,7 +319,7 @@ class Interval:
         Example:
 
         >>> Interval("chr1", 10, 20, strand="-").slice(0, 3)
-        Interval(chrom='chr1', start=17, end=20, strand='-', attrs={})
+        Interval(chrom='chr1', start=17, end=20, strand='-')
         """
         _check_int(i, "i")
         _check_int(j, "j")

@@ -16,7 +16,7 @@ Requires Python >= 3.12.
 
 ```bash
 pip install kipoiseq2           # FASTA extractors and transforms (numpy, pyfaidx)
-pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes and the variant matchers (polars, polars-bio)
+pip install 'kipoiseq2[ranges]' # + scan_vcf_variants, scan_vcf_genotypes and scan_variant_pairs (polars, polars-bio)
 ```
 
 kipoiseq2 does not depend on pandas or pyranges.
@@ -36,7 +36,7 @@ encoded = Encoder().one_hot(seq)  # uint8 array of shape (10, 4)
 
 # sequence with variants applied, anchored at the interval start
 variants = [Variant("chr1", 15, "A", "T")]
-# for the variants of a VCF file in each interval, see MultiVariantsMatcher below
+# for the variants of a VCF file in each interval, see scan_variant_pairs below
 alt_seq = VariantSeqExtractor(fasta, use_strand=True).extract(interval, variants, anchor_pos=10)
 ```
 
@@ -131,39 +131,45 @@ carriers.sink_csv("carriers.csv")
 
 ### Matching variants with intervals
 
-`SingleVariantMatcher` finds every interval-variant pair with one [polars-bio](https://biodatageeks.org/polars-bio/) overlap join.
+`scan_variant_pairs` finds every interval-variant pair with one [polars-bio](https://biodatageeks.org/polars-bio/) overlap join.
 A variant matches an interval if `variant.start < interval.end` and `interval.start < variant.end`.
-Give the variants either as `vcf_file`, the path of a VCF file that `scan_vcf_variants` reads, or as `variants`.
-`variants` takes a polars DataFrame or LazyFrame with the columns `chrom`, `pos`, `ref` and `alt`, or Variant objects.
+The intervals are a polars DataFrame with the columns `chrom`, `start` and `end`, an optional `strand` and any other columns.
+The variants are a polars DataFrame or LazyFrame with the columns `chrom`, `pos`, `ref` and `alt`, e.g. from `scan_vcf_variants`.
 
 ```python
 import polars as pl
-from kipoiseq2.extractors import SingleVariantMatcher
+from kipoiseq2 import Interval, Variant
+from kipoiseq2.extractors import scan_variant_pairs, scan_vcf_variants
 
-# chrom, start, end (0-based, half-open), optional strand, and any attribute columns
-exons = pl.DataFrame({"chrom": ["chr1"], "start": [100], "end": [200], "strand": ["+"], "exon_id": ["e1"]})
-matcher = SingleVariantMatcher("variants.vcf.gz", intervals=exons, interval_attrs=["exon_id"])
+# chrom, start, end (0-based, half-open), optional strand, and any other columns
+exons = pl.DataFrame(
+    {"chrom": ["chr1"], "start": [100], "end": [200], "strand": ["+"], "exon_id": ["e1"], "source": ["HAVANA"]}
+)
+# the pairs keep all columns, so select those that the pairs should carry
+exons = exons.select("chrom", "start", "end", "strand", "exon_id")
+# a LazyFrame with the interval columns, interval_idx, the variant_* columns and variant_idx
+pairs = scan_variant_pairs(exons, scan_vcf_variants("variants.vcf.gz"))
 
-# all pairs as one polars DataFrame: interval columns, interval_idx, variant_* columns, variant_idx
-pairs = matcher.pairs()
+# all pairs in memory, sorted by variant and then by interval
+pairs.collect().sort("variant_idx", "interval_idx")
 
-# for a large VCF, write the pairs to a file, or process them in batches of variant_batch_size variants
-matcher.scan_pairs().sink_parquet("pairs.parquet")
-for batch in matcher.iter_batches():
+# for a large VCF, write the pairs to a file, or process them in batches
+pairs.sink_parquet("pairs.parquet")
+for batch in pairs.collect_batches(chunk_size=10_000):
     ...
 
-# or iterate (Interval, Variant) pairs; interval.attrs holds exon_id
-for interval, variant in matcher:
-    ...
+# Interval and Variant objects, e.g. for VariantSeqExtractor
+for r in pairs.collect().iter_rows(named=True):
+    interval = Interval(r["chrom"], r["start"], r["end"], strand=r["strand"])
+    variant = Variant(r["chrom"], r["variant_pos"], r["variant_ref"], r["variant_alt"])
 ```
 
-`scan_pairs()` streams the VCF through the overlap join.
-`iter_batches()` and iteration run one overlap join per batch of `variant_batch_size` variants (default 10000).
-With a VCF file, the peak memory of `scan_pairs().sink_parquet(...)` and `iter_batches()` does not grow with the size of the VCF.
-`pairs()` holds all pairs in memory.
-The pairs come in VCF order, and per variant in the order of the intervals.
-`MultiVariantsMatcher` yields each interval with an iterator over its variants, also if the interval has no variants.
-polars-bio prints a progress bar on stderr for each collect, so `iter_batches()` prints one per batch.
+`pl.DataFrame(intervals)` turns a list of Interval objects into an intervals frame, and `pl.DataFrame(variants)` does the same for Variant objects.
+`scan_variant_pairs` holds the intervals in memory and streams the variants through the overlap join.
+With a VCF file, the peak memory of `sink_parquet` does not grow with the size of the VCF.
+The pairs come in no fixed order, so sort them if the order matters.
+A null strand in the intervals frame means `"."`, as a missing strand column.
+polars-bio prints a progress bar on stderr for each collect.
 Set the environment variable `TQDM_DISABLE=1` to turn it off.
 
 More examples:

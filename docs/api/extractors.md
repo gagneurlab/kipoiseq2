@@ -20,6 +20,4 @@
 .. automodule:: kipoiseq2.extractors.vcf_matching
    :members:
    :undoc-members:
-   :special-members: __iter__
-   :show-inheritance:
 ```
