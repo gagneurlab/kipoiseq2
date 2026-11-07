@@ -2,7 +2,7 @@ import warnings
 
 import numpy as np
 
-from kipoiseq2.transforms import functional as F
+from kipoiseq2.dataclasses import Interval, _Anchor, _check_resize
 
 __all__ = [
     "Compose",
@@ -80,14 +80,30 @@ class SwapAxes:
 
 
 class ResizeInterval:
-    """Resize the interval"""
+    """Resize intervals with :meth:`Interval.resize <kipoiseq2.dataclasses.Interval.resize>`.
 
-    def __init__(self, width, anchor="center"):
+    :param width: width of the resized intervals
+    :param anchor: the part of the interval to keep: ``"start"``, ``"center"`` or ``"end"``
+    :param use_strand: if False, resize as an unstranded interval. The result keeps the strand.
+    :raises TypeError: if ``width`` is not an int
+    :raises ValueError: if ``width`` is negative, or if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``
+
+    Example:
+
+    >>> from kipoiseq2 import Interval
+    >>> from kipoiseq2.transforms import ResizeInterval
+    >>> ResizeInterval(4, anchor="start")(Interval("chr1", 10, 20, strand="-"))
+    Interval('chr1', 16, 20, strand='-', attrs={})
+    """
+
+    def __init__(self, width: int, *, anchor: _Anchor = "center", use_strand: bool = True) -> None:
+        _check_resize(width, anchor)
         self.width = width
         self.anchor = anchor
+        self.use_strand = use_strand
 
-    def __call__(self, interval):
-        return F.resize_interval(interval, self.width, self.anchor)
+    def __call__(self, interval: Interval) -> Interval:
+        return interval.resize(self.width, anchor=self.anchor, use_strand=self.use_strand)
 
 
 # Splicing

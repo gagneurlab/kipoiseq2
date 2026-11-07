@@ -41,6 +41,7 @@ alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10
 ```
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
+`Interval` is immutable: methods such as `resize`, `shift` and `slop` return a new interval.
 `Variant.start` is `pos - 1` and `Variant.end` is `start + len(ref)`.
 
 ### Encoding sequences

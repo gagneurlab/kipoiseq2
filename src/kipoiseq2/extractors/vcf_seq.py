@@ -56,28 +56,30 @@ class Subsequence:
 
 class IntervalSeqBuilder(list):
     """
-    String builder for ``Subsequence`` and :class:`~kipoiseq2.dataclasses.Interval` objects.
+    String builder for ``Subsequence`` objects and reference ranges.
+
+    A reference range is a tuple ``(start, end)`` of 0-based, half-open coordinates on the reference.
+    Overlapping variants can give a range whose ``start`` is greater than its ``end``; it stands for no bases.
     """
 
     def restore(self, sequence: Subsequence):
-        """Replace every Interval in the builder by its part of ``sequence``.
+        """Replace every reference range in the builder by its part of ``sequence``.
 
-        :param sequence: the reference sequence that covers all intervals
+        :param sequence: the reference sequence that covers all ranges
             in the builder.
         """
-        for i, interval in enumerate(self):
-            # interval.end can be bigger than interval.start
-            interval_len = max(0, interval.end - interval.start)
-
-            if type(self[i]) is Interval:
-                start = interval.start - sequence.start
-                end = start + interval_len
-                self[i] = sequence[start:end]
+        for i, item in enumerate(self):
+            if isinstance(item, tuple):
+                range_start, range_end = item
+                start = range_start - sequence.start
+                self[i] = sequence[start : start + max(0, range_end - range_start)]
 
     def _concat(self):
         for sequence in self:
             if type(sequence) is not Subsequence:
-                raise TypeError("Intervals should be restored with `restore` method before calling concat method!")
+                raise TypeError(
+                    "Reference ranges should be restored with `restore` method before calling concat method!"
+                )
             yield sequence.seq
 
     def concat(self):
@@ -188,7 +190,8 @@ class VariantSeqExtractor(BaseExtractor):
 
         # the fetch interval is half-open, so it may end at chrom_len
         istart = max(istart, 0)
-        iend = min(iend, chrom_len)
+        # int keeps the end an int for a float chrom_len
+        iend = int(min(iend, chrom_len))
 
         # 4. Iterate from the anchor point outwards. At each
         # register the interval from which to take the reference sequence
@@ -269,10 +272,10 @@ class VariantSeqExtractor(BaseExtractor):
         for ref, alt in down_variants:
             if ref.end <= istart:
                 break
-            down_sb.append(Interval(interval.chrom, ref.end, prev))
+            down_sb.append((ref.end, prev))
             down_sb.append(alt)
             prev = ref.start
-        down_sb.append(Interval(interval.chrom, istart, prev))
+        down_sb.append((istart, prev))
         down_sb.reverse()
 
         return down_sb
@@ -285,10 +288,10 @@ class VariantSeqExtractor(BaseExtractor):
         for ref, alt in up_variants:
             if ref.start >= iend:
                 break
-            up_sb.append(Interval(interval.chrom, prev, ref.start))
+            up_sb.append((prev, ref.start))
             up_sb.append(alt)
             prev = ref.end
-        up_sb.append(Interval(interval.chrom, prev, iend))
+        up_sb.append((prev, iend))
 
         return up_sb
 
