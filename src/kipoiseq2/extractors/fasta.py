@@ -5,6 +5,7 @@ from typing import Self
 
 from kipoiseq2.dataclasses import Interval, _is_reverse
 from kipoiseq2.extractors.base import _chrom_size
+from kipoiseq2.transforms.functional import reverse_complement
 
 __all__ = ["FastaStringExtractor"]
 
@@ -101,18 +102,19 @@ class FastaStringExtractor:
             is True. The letters are uppercase unless the extractor was built with ``uppercase=False``.
         :raises TypeError: if ``interval`` is not an Interval
         :raises ValueError: if ``interval.chrom`` is not in the FASTA file,
-            or if ``interval`` starts before 0 or ends after the end of the chromosome
+            if ``interval`` starts before 0 or ends after the end of the chromosome,
+            or if the sequence needs a reverse complement and contains a letter without IUPAC complement, e.g. ``U``
         """
         if not isinstance(interval, Interval):
             raise TypeError(f"interval must be an Interval, not {type(interval).__name__}")
         chrom_size = _chrom_size(self._chrom_sizes, interval.chrom)
         if interval.start < 0 or interval.end > chrom_size:
             raise ValueError(f"interval {interval} must lie within 0 and {chrom_size}, the length of {interval.chrom}")
-        # reverse-complement seq the negative strand
-        rc = _is_reverse(interval, use_strand=self._use_strand)
-
         # pyfaidx wants a 1-based interval
-        return str(self._fasta.get_seq(interval.chrom, interval.start + 1, interval.end, rc=rc).seq)
+        seq = str(self._fasta.get_seq(interval.chrom, interval.start + 1, interval.end).seq)
+        if _is_reverse(interval, use_strand=self._use_strand):
+            return reverse_complement(seq)
+        return seq
 
     def close(self) -> None:
         """Close the FASTA file. Closing twice does not raise."""
@@ -128,26 +130,3 @@ class FastaStringExtractor:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
-
-
-# class BigWigExtractor(BaseExtractor):
-#     """Big-wig file extractor
-
-#     NOTE: The extractor is not thread-save.
-#     If you with to use it with multiprocessing,
-#     create a new extractor object in each process.
-
-#     # Arguments
-#       bigwig_file: path to the bigwig file
-#     """
-
-#     def __init__(self, bigwig_file):
-
-#         self.bigwig_file = bigwig_file
-#         self.batch_extractor = BigwigExtractor(self.bigwig_file)
-
-#     def extract(self, interval):
-#         return self.batch_extractor([interval])[0]
-
-#     def close(self):
-#         return self.batch_extractor.close()
