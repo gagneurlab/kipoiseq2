@@ -29,6 +29,8 @@ dependencies = [
 ranges = [
     "polars>=1.37.1",
     "polars-bio>=0.31",
+    # tokenize_series and one_hot_series read the Arrow buffers of polars Series
+    "pyarrow",
 ]
 
 [project.urls]

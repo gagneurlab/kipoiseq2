@@ -273,6 +273,31 @@ def test_extract_ref_differs(variant_seq_extractor):
         variant_seq_extractor.extract(Interval("chr1", 20, 30), [Variant("chr1", 13, "TA", "T")], anchor_pos=20)
 
 
+# the reference from 0 to 10 is ACGTAACGTA
+OVERLAPPING_VARIANTS = {
+    "same_base": [Variant("chr1", 5, "A", "C"), Variant("chr1", 5, "A", "G")],
+    "snv_in_deletion": [Variant("chr1", 5, "AAC", "A"), Variant("chr1", 6, "A", "T")],
+    "snv_at_deletion_end": [Variant("chr1", 2, "CGTAAC", "C"), Variant("chr1", 7, "C", "T")],
+    "insertions_at_one_base": [Variant("chr1", 5, "A", "AT"), Variant("chr1", 5, "A", "AGG")],
+    "duplicate": [Variant("chr1", 5, "A", "C"), Variant("chr1", 5, "A", "C")],
+}
+
+
+@pytest.mark.parametrize("variants", OVERLAPPING_VARIANTS.values(), ids=OVERLAPPING_VARIANTS.keys())
+@pytest.mark.parametrize("anchor_pos", [None, 0, 5, 10])
+def test_extract_overlapping_variants(variant_seq_extractor, variants, anchor_pos):
+    # in 0.1, both ALTs were inserted, so the sequence could be too long
+    for order in (variants, variants[::-1]):
+        with pytest.raises(ValueError, match=r"^variants chr1:\S+ and chr1:\S+ overlap, but the REF of two variants"):
+            variant_seq_extractor.extract(Interval("chr1", 0, 10), order, anchor_pos=anchor_pos)
+
+
+def test_extract_adjacent_variants(variant_seq_extractor):
+    # variants that touch but do not share a base do not overlap
+    variants = [Variant("chr1", 5, "A", "T"), Variant("chr1", 6, "AC", "A"), Variant("chr1", 4, "T", "TT")]
+    assert variant_seq_extractor.extract(Interval("chr1", 0, 10), variants) == "ACGTTTAGTA"
+
+
 @pytest.mark.parametrize("ref", ["C", "c"])
 def test_extract_ref_ignores_case(ref):
     # sample.fasta has the sequence ACGTacgt, so with uppercase=False the reference has a lowercase c at position 6

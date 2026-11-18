@@ -12,6 +12,9 @@ Uppercase the sequences at the source instead, e.g. with ``seq.upper()``,
 or read them with ``FastaStringExtractor``, which uppercases by default.
 An unknown letter raises a ValueError that names it.
 
+:meth:`Tokenizer.tokenize_series` and :meth:`Encoder.one_hot_series` encode all sequences of a polars Series at once.
+They need polars, which the ``ranges`` extra installs.
+
 Example:
 
 >>> from kipoiseq2 import Encoder, Tokenizer
@@ -25,16 +28,22 @@ array([[1, 0, 0, 0],
 array([0, 1, 2, 3, 4, 5], dtype=uint8)
 """
 
+from __future__ import annotations
+
 import functools
 from collections.abc import Container, Mapping
 from types import MappingProxyType
-from typing import Any, Literal, get_args
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
 
 from kipoiseq2.alphabets import DNA, Alphabet
 from kipoiseq2.dataclasses import _check_int
+
+if TYPE_CHECKING:
+    import polars as pl
+    import pyarrow as pa
 
 __all__ = ["Encoder", "Tokenizer"]
 
@@ -263,12 +272,137 @@ class Tokenizer:
         except KeyError:
             raise self._unknown_letters_error(seq) from None
 
+    def tokenize_series(self, seqs: pl.Series) -> pl.Series:
+        """Convert the sequences of a polars Series to tokens.
+
+        Each sequence gets the tokens of :meth:`tokenize`, but this method converts all sequences at once.
+        For letters of single ASCII characters, it translates the Arrow data buffer of ``seqs`` with one call.
+        The result keeps the name of ``seqs``.
+        If all sequences have the same length, the result is an Array column ``pl.Array(dtype, length)``.
+        Then ``.to_numpy()`` returns an array of shape ``(len(seqs), length)`` without a copy.
+        Otherwise the result is a List column ``pl.List(dtype)``.
+        dtype is the polars type of :attr:`dtype`, e.g. ``pl.UInt8``, and length is the number of letters.
+        An empty ``seqs`` gives an empty List column, because it has no length for an Array column.
+
+        :param seqs: polars Series of strings without nulls
+        :returns: polars Series with the tokens of each sequence
+        :raises TypeError: if ``seqs`` is not a polars Series of strings
+        :raises ValueError: if ``seqs`` contains nulls, or if :meth:`tokenize` raises a ValueError for a sequence.
+            For the first such sequence, it raises the ValueError of :meth:`tokenize`, with a note that names the row.
+
+        Example:
+
+        >>> import polars as pl
+        >>> tokens = Tokenizer().tokenize_series(pl.Series("seq", ["ACG", "TNA"]))
+        >>> tokens.dtype, tokens.to_list()
+        (Array(UInt8, shape=(3,)), [[0, 1, 2], [3, 4, 0]])
+        """
+        tokens, offsets = self._series_tokens(seqs)
+        return _series(seqs.name, tokens, offsets)
+
+    def _series_tokens(self, seqs: pl.Series) -> tuple[NDArray[np.integer[Any]], NDArray[np.int64]]:
+        """Return the tokens of all sequences of ``seqs``, and the offsets of the sequences in the tokens.
+
+        :returns: the tokens, and ``len(seqs) + 1`` offsets that start at 0.
+            The tokens of ``seqs[i]`` are ``tokens[offsets[i]:offsets[i + 1]]``.
+        :raises TypeError: as :meth:`tokenize_series`
+        :raises ValueError: as :meth:`tokenize_series`
+        """
+        import polars as pl
+
+        _check_series(seqs)
+        if self._table is None:
+            # the slow path tokenizes each sequence on its own
+            arrays = []
+            for i, seq in enumerate(seqs.to_list()):
+                try:
+                    arrays.append(self.tokenize(seq))
+                except ValueError as e:
+                    e.add_note(f"in the row {i} of seqs")
+                    raise
+            offsets = np.zeros(len(arrays) + 1, dtype=np.int64)
+            np.cumsum([len(tokens) for tokens in arrays], out=offsets[1:])
+            return np.concatenate([np.empty(0, dtype=self._dtype), *arrays]), offsets
+        # the oldest compat_level gives large_string, while a newer one can give string_view
+        offsets, data = _arrow_strings(seqs.to_arrow(compat_level=pl.CompatLevel.oldest()))
+        # translate needs bytes, so bytes copies the data first.
+        # The table has only ASCII letters, so a non-ASCII byte gives the sentinel too.
+        rows = bytes(data).translate(self._table)
+        bad = rows.find(_SENTINEL)
+        if bad >= 0:
+            # the byte offsets give the row of the first unknown letter
+            i = int(np.searchsorted(offsets, bad, side="right")) - 1
+            error = self._unknown_letters_error(seqs[i])
+            error.add_note(f"in the row {i} of seqs")
+            raise error
+        # all bytes are ASCII letters, so the byte offsets are the offsets of the letters
+        tokens = np.frombuffer(rows, dtype=np.uint8)
+        return (tokens if self._ids is None else self._ids.take(tokens)), offsets
+
     def _unknown_letters_error(self, seq: str) -> ValueError:
         """Return the ValueError that names the letters of ``seq`` that are not in :attr:`alphabet`."""
         n = self._letter_length
         letters = set(seq) if n == 1 else {seq[i : i + n] for i in range(0, len(seq), n)}
         unknown = {letter for letter in letters if letter not in self._tokens}
         return _unknown_letters_error(unknown, self._tokens, "letters", "the alphabet")
+
+
+def _check_series(seqs: object) -> None:
+    """Raise a TypeError if ``seqs`` is not a polars Series of strings, and a ValueError if it contains nulls."""
+    import polars as pl
+
+    if not isinstance(seqs, pl.Series):
+        raise TypeError(f"seqs must be a polars Series, not {type(seqs).__name__}")
+    if seqs.dtype != pl.String:
+        raise TypeError(f"seqs must be a polars Series of strings, got the dtype {seqs.dtype}")
+    if seqs.null_count():
+        raise ValueError(f"seqs must not contain nulls, but the row {seqs.is_null().arg_true()[0]} is null")
+
+
+def _arrow_strings(arr: pa.Array) -> tuple[NDArray[np.int64], memoryview]:
+    """Return the byte offsets and the bytes of the strings of an Arrow array.
+
+    :param arr: Arrow array of large_string without nulls, e.g. of ``pl.Series.to_arrow``
+        with ``compat_level=pl.CompatLevel.oldest()``
+    :returns: ``len(arr) + 1`` offsets that start at 0, and the bytes of all strings.
+        The string ``i`` is ``data[offsets[i]:offsets[i + 1]]``.
+    """
+    _, offsets_buffer, data_buffer = arr.buffers()
+    # a sliced array starts at arr.offset in its buffers
+    offsets = np.frombuffer(offsets_buffer, dtype=np.int64, count=len(arr) + 1, offset=8 * arr.offset)
+    start, end = int(offsets[0]), int(offsets[-1])
+    return offsets - start, memoryview(data_buffer)[start:end]
+
+
+def _series(name: str, values: NDArray[Any], offsets: NDArray[np.int64]) -> pl.Series:
+    """Return the encoded sequences as one polars Series, without a copy of ``values``.
+
+    :param name: the name of the Series
+    :param values: the tokens or the one-hot rows of the letters of all sequences, one sequence after the other
+    :param offsets: ``n + 1`` offsets that start at 0. The sequence ``i`` is ``values[offsets[i]:offsets[i + 1]]``.
+    :returns: an Array column if the ``n`` sequences have the same length, and a List column otherwise
+    :raises TypeError: if polars has no type for the dtype of ``values``
+    """
+    import polars as pl
+    import pyarrow as pa
+
+    if not values.dtype.isnative:
+        # Arrow holds numbers in the native byte order
+        values = values.astype(values.dtype.newbyteorder("="))
+    try:
+        pa.from_numpy_dtype(values.dtype)
+    except NotImplementedError:
+        raise TypeError(f"polars has no type for the dtype {values.dtype}") from None
+    lengths = np.diff(offsets)
+    if lengths.size and (lengths == lengths[0]).all():
+        # polars keeps the array without a copy, except for bool, which Arrow packs into bits
+        return pl.Series(name, values.reshape(len(lengths), int(lengths[0]), *values.shape[1:]))
+    # pa.array keeps the values without a copy, except for bool, which Arrow packs into bits
+    items = pa.array(values.reshape(-1))
+    if values.ndim == 2:
+        # one array of n_columns values per letter
+        items = pa.FixedSizeListArray.from_arrays(items, values.shape[1])
+    return pl.Series(name, pa.LargeListArray.from_arrays(pa.array(offsets), items))
 
 
 class Encoder:
@@ -402,6 +536,37 @@ class Encoder:
                [0, 0, 0, 0]], dtype=uint8)
         """
         return self._rows.take(self._tokenizer.tokenize(seq), axis=0)
+
+    def one_hot_series(self, seqs: pl.Series) -> pl.Series:
+        """One-hot encode the sequences of a polars Series.
+
+        Each sequence gets the array of :meth:`one_hot`, but this method encodes all sequences at once,
+        as :meth:`Tokenizer.tokenize_series` does.
+        The result keeps the name of ``seqs``.
+        If all sequences have the same length, the result is an Array column ``pl.Array(dtype, (length, n_columns))``.
+        Then ``.to_numpy()`` returns an array of shape ``(len(seqs), length, n_columns)``,
+        without a copy unless :attr:`dtype` is bool.
+        Otherwise the result is a List column ``pl.List(pl.Array(dtype, n_columns))``.
+        dtype is the polars type of :attr:`dtype`, e.g. ``pl.UInt8``, length is the number of letters,
+        and n_columns is ``len(alphabet.letters)``.
+        An empty ``seqs`` gives an empty List column, because it has no length for an Array column.
+
+        :param seqs: polars Series of strings without nulls
+        :returns: polars Series with the one-hot array of each sequence
+        :raises TypeError: if ``seqs`` is not a polars Series of strings,
+            or if polars has no type for :attr:`dtype`, e.g. for ``np.longdouble`` on x86-64
+        :raises ValueError: if ``seqs`` contains nulls, or if :meth:`one_hot` raises a ValueError for a sequence.
+            For the first such sequence, it raises the ValueError of :meth:`one_hot`, with a note that names the row.
+
+        Example:
+
+        >>> import polars as pl
+        >>> one_hot = Encoder().one_hot_series(pl.Series("seq", ["A", "CN"]))
+        >>> one_hot.dtype, one_hot.to_list()
+        (List(Array(UInt8, shape=(4,))), [[[1, 0, 0, 0]], [[0, 1, 0, 0], [0, 0, 0, 0]]])
+        """
+        tokens, offsets = self._tokenizer._series_tokens(seqs)
+        return _series(seqs.name, self._rows.take(tokens, axis=0), offsets)
 
     def decode(self, x: NDArray[Any]) -> str:
         """Convert a one-hot encoded array back to a sequence.
