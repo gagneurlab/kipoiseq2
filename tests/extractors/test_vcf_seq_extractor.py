@@ -19,10 +19,10 @@ intervals = [Interval("chr1", 4, 10), Interval("chr1", 5, 30), Interval("chr1", 
 def interval_seq_builder():
     return IntervalSeqBuilder(
         [
-            Interval("chr1", 10, 13),
-            Interval("chr1", 13, 14),
+            (10, 13),
+            (13, 14),
             Subsequence(seq="TAGC", start=14, end=18),
-            Interval("chr1", 18, 20),
+            (18, 20),
         ]
     )
 
@@ -35,19 +35,19 @@ def test_interval_seq_builder_restore(interval_seq_builder):
     assert interval_seq_builder[2].seq == "TAGC"
     assert interval_seq_builder[3].seq == "TT"
 
-    interval_seq_builder.append(Interval("chr1", 5, 10))
+    interval_seq_builder.append((5, 10))
     interval_seq_builder.restore(sequence)
     assert interval_seq_builder[4].seq == ""
 
-    interval_seq_builder.append(Interval("chr1", 20, 25))
+    interval_seq_builder.append((20, 25))
     interval_seq_builder.restore(sequence)
     assert interval_seq_builder[5].seq == ""
 
-    interval_seq_builder.append(Interval("chr1", 10, 5))
+    interval_seq_builder.append((10, 5))
     interval_seq_builder.restore(sequence)
     assert interval_seq_builder[6].seq == ""
 
-    interval_seq_builder.append(Interval("chr1", 25, 20))
+    interval_seq_builder.append((25, 20))
     interval_seq_builder.restore(sequence)
     assert interval_seq_builder[7].seq == ""
 
@@ -218,3 +218,6 @@ def test_extract_interval_beyond_chromosome_end(variant_seq_extractor):
     interval = Interval("chr1", CHROM_LEN - 5, CHROM_LEN + 5)
     seq = variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN, chrom_len=CHROM_LEN, is_padding=True)
     assert seq == "ACGTANNNNN"
+    # chrom_len may be a float
+    float_len = float(CHROM_LEN)
+    assert variant_seq_extractor.extract(interval, [], anchor=CHROM_LEN, chrom_len=float_len, is_padding=True) == seq

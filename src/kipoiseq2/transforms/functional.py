@@ -1,6 +1,8 @@
 import string
 from collections.abc import Mapping
 
+from kipoiseq2.dataclasses import _Anchor, _check_resize, _resize_bounds
+
 
 def rc_dna(seq):
     """
@@ -44,126 +46,112 @@ def rc_rna(seq):
 # sequence trimming
 
 
-def pad(seq, length, value="N", anchor="center"):
-    """Pad a sequence to a fixed length
+def _check_seq(seq: str, length: int, anchor: str) -> None:
+    """Raise a TypeError or ValueError for invalid ``seq``, ``length`` or ``anchor`` of :func:`fixed_len`."""
+    if not isinstance(seq, str):
+        raise TypeError(f"seq must be a str, not {type(seq).__name__}")
+    _check_resize(length, anchor, width_name="length")
 
-    :param seq: str or list of chars; Sequence to pad
-    :param length: int; Final length of the sequence. Must be at least ``len(seq)``.
-    :param value: Neutral element to pad the sequence with. Can be ``str`` or ``list``, of the same type as ``seq``.
-        If ``value`` has several elements, it is repeated and cut to the pad length on each side,
-        e.g. ``pad("A", 4, value="NM", anchor="end")`` returns ``"NMNA"``.
-    :param anchor: character; 'start', 'end' or 'center'. To which end to anchor the sequence when padding.
-    :returns: Sequence of length ``length``, of the same type as ``seq``
+
+def _check_value(value: str) -> None:
+    """Raise a TypeError or ValueError for an invalid ``value`` of :func:`pad`."""
+    if not isinstance(value, str):
+        raise TypeError(f"value must be a str, not {type(value).__name__}")
+    if not value:
+        raise ValueError("value must not be empty")
+
+
+def pad(seq: str, length: int, *, anchor: _Anchor = "center", value: str = "N") -> str:
+    """Pad the sequence to ``length``.
+
+    It pads like :meth:`Interval.resize <kipoiseq2.dataclasses.Interval.resize>` grows
+    an interval from 0 to ``len(seq)`` on the "+" strand.
+
+    :param seq: the sequence to pad
+    :param length: the length of the padded sequence, at least ``len(seq)``
+    :param anchor: the part of ``seq`` to keep in place: ``"start"``, ``"center"`` or ``"end"``
+    :param value: the letters to pad with. If ``value`` has several letters,
+        it is repeated and cut to the pad length on each side,
+        e.g. ``pad("A", 4, anchor="end", value="NM")`` returns ``"NMNA"``.
+    :returns: the padded sequence
+    :raises TypeError: if ``seq`` or ``value`` is not a str, or if ``length`` is not an int
+    :raises ValueError: if ``length`` is less than ``len(seq)``, if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``,
+        or if ``value`` is empty
+
+    Example:
+
+    >>> pad("ACGT", 7)
+    'NNACGTN'
     """
-    seq_len = len(seq)
-    assert length >= seq_len
-    if anchor == "end":
-        n_left = length - seq_len
-        n_right = 0
-    elif anchor == "start":
-        n_right = length - seq_len
-        n_left = 0
-    elif anchor == "center":
-        n_left = (length - seq_len) // 2 + (length - seq_len) % 2
-        n_right = (length - seq_len) // 2
-    else:
-        raise ValueError("anchor can be of: end, start or center")
-
+    _check_seq(seq, length, anchor)
+    _check_value(value)
+    if length < len(seq):
+        raise ValueError(f"length must be at least len(seq)={len(seq)}, got {length}")
+    start, end = _resize_bounds(0, len(seq), length, anchor, reverse=False)
     # repeat value often enough and cut it to the pad length on each side
-    padding = value * (max(n_left, n_right) // len(value) + 1)
-
-    return padding[:n_left] + seq + padding[:n_right]
-
-
-def trim(seq, length, anchor="center"):
-    seq_len = len(seq)
-
-    assert length <= seq_len
-    if anchor == "end":
-        return seq[-length:]
-    elif anchor == "start":
-        return seq[0:length]
-    elif anchor == "center":
-        dl = seq_len - length
-        n_left = dl // 2 + dl % 2
-        n_right = seq_len - dl // 2
-        return seq[n_left:n_right]
-    else:
-        raise ValueError("anchor can be of: end, start or center")
+    padding = value * (max(-start, end - len(seq)) // len(value) + 1)
+    return padding[:-start] + seq + padding[: end - len(seq)]
 
 
-def fixed_len(seq, length, anchor="center", value="N"):
-    """Pad or trim a sequence to a fixed length. Procedure:
+def trim(seq: str, length: int, *, anchor: _Anchor = "center") -> str:
+    """Trim the sequence to ``length``.
 
-    1. Pad the sequence with N's or any other string or list element (``value``) if it is shorter than ``length``
-    2. Trim the sequence if it is longer than ``length``
+    It keeps the letters that :meth:`Interval.resize <kipoiseq2.dataclasses.Interval.resize>` keeps
+    of an interval from 0 to ``len(seq)`` on the "+" strand.
 
-    .. note::
-       See also: https://keras.io/preprocessing/sequence/
-       Applicable also for lists of characters
+    :param seq: the sequence to trim
+    :param length: the length of the trimmed sequence, at most ``len(seq)``
+    :param anchor: the part of ``seq`` to keep: ``"start"``, ``"center"`` or ``"end"``
+    :returns: the trimmed sequence
+    :raises TypeError: if ``seq`` is not a str, or if ``length`` is not an int
+    :raises ValueError: if ``length`` is negative or greater than ``len(seq)``,
+        or if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``
 
-    :param seq: str or list of chars; Sequence to pad or trim
-    :param length: int; Final length of the sequence.
-    :param anchor: character; 'start', 'end' or 'center'. To which end to anchor the sequence when trimming/padding.
-        See examples below.
-    :param value: Neutral element to pad the sequence with. Can be ``str`` or ``list``, of the same type as ``seq``.
-        If ``value`` has several elements, it is repeated and cut to the pad length on each side (see :func:`pad`).
-    :returns: Sequence of length ``length``, of the same type as ``seq``
+    Example:
+
+    >>> trim("ACGTACG", 4)
+    'GTAC'
+    """
+    _check_seq(seq, length, anchor)
+    if length > len(seq):
+        raise ValueError(f"length must be at most len(seq)={len(seq)}, got {length}")
+    start, end = _resize_bounds(0, len(seq), length, anchor, reverse=False)
+    return seq[start:end]
+
+
+def fixed_len(seq: str, length: int, *, anchor: _Anchor = "center", value: str = "N") -> str:
+    """Pad or trim the sequence to ``length``, with :func:`pad` or :func:`trim`.
+
+    :param seq: the sequence to pad or trim
+    :param length: the length of the returned sequence
+    :param anchor: the part of ``seq`` to keep in place: ``"start"``, ``"center"`` or ``"end"``
+    :param value: the letters to pad with, see :func:`pad`
+    :returns: the sequence of length ``length``
+    :raises TypeError: if ``seq`` or ``value`` is not a str, or if ``length`` is not an int
+    :raises ValueError: if ``length`` is negative, if ``anchor`` is not ``"start"``, ``"center"`` or ``"end"``,
+        or if ``value`` is empty
 
     Example:
 
     >>> sequence = 'CTTACTCAGA'
-    >>> fixed_len(sequence, 10, anchor="start", value="N")
+    >>> fixed_len(sequence, 10, anchor="start")
     'CTTACTCAGA'
-    >>> fixed_len(sequence, 10, anchor="end", value="N")
-    'CTTACTCAGA'
-    >>> fixed_len(sequence, 4, anchor="center", value="N")
+    >>> fixed_len(sequence, 4, anchor="center")
     'ACTC'
 
     >>> sequence = 'TCTTTA'
-    >>> fixed_len(sequence, 10, anchor="start", value="N")
+    >>> fixed_len(sequence, 10, anchor="start")
     'TCTTTANNNN'
-    >>> fixed_len(sequence, 10, anchor="end", value="N")
+    >>> fixed_len(sequence, 10, anchor="end")
     'NNNNTCTTTA'
-    >>> fixed_len(sequence, 4, anchor="center", value="N")
+    >>> fixed_len(sequence, 4, anchor="center")
     'CTTT'
     """
-    # neutral element type checking
-    assert isinstance(value, list) or isinstance(value, str)
-    assert isinstance(value, type(seq))
-    assert isinstance(length, int)
-
-    # pad and subset
-    if len(seq) < length:
-        return pad(seq, length, value=value, anchor=anchor)
-    elif len(seq) > length:
-        return trim(seq, length, anchor=anchor)
-    else:
-        return seq
-
-
-def resize_interval(interval, width, anchor="center"):
-    """Resize the Interval. Returns new Interval instance with correct length.
-
-    :param interval: an :class:`~kipoiseq2.dataclasses.Interval`. It is not modified.
-    :param width: desired width of the output interval
-    :param anchor: str; which part of the sequence should be anchored. Choices: 'start', 'center', or 'end'
-    """
-    if anchor == "start":
-        start = interval.start
-        end = interval.start + width
-    elif anchor == "end":
-        start = interval.end - width
-        end = interval.end
-    elif anchor == "center":
-        center = int((interval.start + interval.end) / 2)
-        half_len = int(width / 2)
-        start = center - half_len
-        end = center + half_len + width % 2
-    else:
-        raise Exception("Interval resizing anchor point can only be 'start', 'end' or 'center'")
-
-    return interval.slop(upstream=interval.start - start, downstream=end - interval.end)
+    _check_seq(seq, length, anchor)
+    _check_value(value)
+    if length > len(seq):
+        return pad(seq, length, anchor=anchor, value=value)
+    return trim(seq, length, anchor=anchor)
 
 
 TRANSLATION_TABLE = {

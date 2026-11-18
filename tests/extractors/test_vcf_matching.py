@@ -176,13 +176,13 @@ def test_SingleVariantMatcher_interval_attrs():
 
 
 def test_SingleVariantMatcher_yields_given_objects():
-    named = [Interval("chr1", 1, 10, name="a", attrs={"x": 1})]
-    ((interval, variant), *_) = list(SingleVariantMatcher(variants=variants, intervals=named))
-    assert interval is named[0]
+    given = [Interval("chr1", 1, 10, attrs={"x": 1})]
+    ((interval, variant), *_) = list(SingleVariantMatcher(variants=variants, intervals=given))
+    assert interval is given[0]
     assert variant is variants[0]
 
     # a table gives new Variant objects
-    ((_, variant), *_) = list(SingleVariantMatcher(vcf_file, intervals=named))
+    ((_, variant), *_) = list(SingleVariantMatcher(vcf_file, intervals=given))
     assert variant == variants[0]
     assert variant.source is None
 
