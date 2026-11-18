@@ -34,8 +34,8 @@ intersphinx_mapping = {
     "polars": ("https://docs.pola.rs/api/python/stable", None),
 }
 
-# MyST renders README.md, MIGRATING.md and CHANGELOG.md
-source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
+# MyST renders the doc pages and the included README.md, MIGRATING.md and CHANGELOG.md
+source_suffix = {".md": "markdown"}
 
 # HTML
 html_theme = "furo"

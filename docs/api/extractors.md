@@ -1,6 +1,6 @@
-Extractors
-==========
+# Extractors
 
+```{eval-rst}
 .. automodule:: kipoiseq2.extractors.base
    :members:
    :undoc-members:
@@ -24,3 +24,4 @@ Extractors
    :undoc-members:
    :special-members: __iter__
    :show-inheritance:
+```
