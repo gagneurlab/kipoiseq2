@@ -47,6 +47,7 @@ Without `anchor_pos`, indels change the length of the sequence.
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
 `Interval` is immutable: methods such as `resize`, `shift` and `slop` return a new interval.
+`Variant` is immutable too, and holds only `chrom`, `pos`, `ref` and `alt`. The other VCF columns stay in the frame of `scan_vcf_variants`.
 `Variant.start` is `pos - 1` and `Variant.end` is `start + len(ref)`.
 
 ### Encoding sequences
@@ -72,7 +73,9 @@ Tokenizer().tokenize("ACGTNR")  # array([0, 1, 2, 3, 4, 5], dtype=uint8), the co
 
 The encoders are case-sensitive, and a letter that is not in the alphabet raises a ValueError that names it.
 So with `DNA`, a lowercase letter of a soft-masked repeat raises this ValueError.
-`FastaStringExtractor` uppercases the sequences by default, so soft-masked repeats encode like other bases.
+Sequences must be uppercase at the source.
+`FastaStringExtractor` uppercases them by default, so soft-masked repeats encode like other bases.
+`scan_vcf_variants` and `scan_vcf_genotypes` uppercase REF and ALT.
 For sequences from other sources, call `seq.upper()` first.
 `DNA` and `RNA` have `N` and the other IUPAC ambiguity codes, e.g. `R` for A or G.
 GRCh37 and GRCh38 contain a few of them besides `N`.
@@ -100,6 +103,10 @@ rows[Tokenizer().tokenize("ACGTNR")]  # float32 array of shape (6, 5)
 
 `scan_vcf_variants` reads a VCF file with polars-bio as a polars LazyFrame, with one row per ALT allele.
 Its coordinates follow `Variant`: `start` is `pos - 1` and `end` is `start + len(ref)`.
+It keeps only the ALT alleles that are sequences of the bases A, C, G, T and N.
+VCF bases are case-insensitive, so `ref` and `alt` are uppercase, and the case-sensitive encoders take them as they are.
+`sequence_alts_only=False` keeps the other ALT alleles too, e.g. `*` and symbolic ALT alleles such as `<DEL>`.
+Use it only for tables, because `VariantSeqExtractor` inserts symbolic ALT alleles as text.
 
 ```python
 import polars as pl

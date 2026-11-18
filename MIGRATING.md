@@ -13,6 +13,10 @@ kipoiseq2 also drops these parts of kipoiseq:
 kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra is gone and the `ranges` extra covers VCF reading:
 - `MultiSampleVCF` becomes `scan_vcf_variants`, with one row per ALT allele, or `scan_vcf_genotypes`, with one row per ALT allele and sample.
   Both return a polars LazyFrame instead of Variant objects.
+  Both keep only the ALT alleles that are sequences of the bases A, C, G, T and N, in any case.
+  Unlike `MultiSampleVCF`, they keep the ALT alleles that contain N, and they drop symbolic ALT alleles such as `<DEL>`.
+  They also drop a missing ALT (`.`), which `MultiSampleVCF` gave as an empty alt.
+  Both give `ref` and `alt` in uppercase, because VCF bases are case-insensitive. `MultiSampleVCF` kept the case of the file.
 - `query_all().filter(lambda ...)` and `FilterVariantQuery` become a polars filter on `scan_vcf_variants(path)`.
   For example, `filter(lambda v: v.qual > 10)` becomes `.filter(pl.col("qual") > 10)`, and `FilterVariantQuery()` becomes `.filter(pl.col("filter") == "PASS")`.
   polars-bio gives a missing QUAL (`.`) as null and a missing FILTER (`.`) as an empty string.
@@ -22,7 +26,9 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - `to_vcf` becomes `polars_bio.sink_vcf`, e.g. `pb.sink_vcf(pb.scan_vcf(path).filter(pl.col("qual") > 10), out_path)`.
 - `VariantIntervalQueryable` and the query classes of `kipoiseq.extractors.vcf_query` are gone: filter the polars frames instead.
 - `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with a matcher, and apply them with `VariantSeqExtractor`.
-- `Variant.from_cyvcf` and `Variant.from_cyvcf_and_given_alt` are gone. `Variant.source` stays as a slot for any source object.
+- `Variant.from_cyvcf` and `Variant.from_cyvcf_and_given_alt` are gone.
+  A `Variant` has only `chrom`, `pos`, `ref` and `alt`, so `id`, `qual`, `filter`, `info`, `source` and `copy()` are gone.
+  The VCF columns ID, QUAL, FILTER and INFO stay in the frame of `scan_vcf_variants`.
 
 The matchers use polars instead of pyranges:
 - `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`. `intervals` also takes a sequence of Interval objects.
@@ -224,3 +230,18 @@ The matchers use polars instead of pyranges:
   - `to_scalar(x)` becomes `x.item()` for a numpy scalar.
   - `batch_iter(items, n)` becomes `itertools.batched(items, n)`, which yields tuples instead of lists.
   - `parse_alphabet(alphabet)` becomes `list(alphabet)`. For `Encoder` and `Tokenizer`, pass `Alphabet(list(alphabet))` from `kipoiseq2.alphabets`.
+- `Variant` is immutable and has only the fields `chrom`, `pos`, `ref` and `alt`.
+  `id`, `qual`, `filter`, `info`, `source` and `copy()` are gone, so `Variant("chr1", 10, "C", "T", id="rs1")` raises a TypeError.
+  The VCF columns ID, QUAL, FILTER and INFO stay in the frame of `scan_vcf_variants`, e.g. `scan_vcf_variants(path).select("chrom", "pos", "id", "qual", "filter")`.
+- `Variant` raises a TypeError for arguments of the wrong type instead of converting them, and a ValueError for a `pos` below 1 or an empty `ref`.
+  In 0.1, `Variant("chr1", 10.7, "C", "T")` gave `pos=10`, and `Variant("chr1", "10", "C", "T")` gave `pos=10` too.
+- A `Variant` is equal only to a `Variant` with the same fields.
+  In 0.1, it was also equal to any object with the same `chrom`, `pos`, `ref` and `alt`, e.g. a kipoiseq `Variant`.
+- `scan_vcf_variants` takes only the options `info_fields` and `sequence_alts_only`, as keyword arguments.
+  It no longer passes other keyword arguments to `polars_bio.scan_vcf`.
+  For the FORMAT fields of the samples, use `scan_vcf_genotypes(path, samples=..., format_fields=..., carriers_only=False)` instead of `scan_vcf_variants(path, samples=..., format_fields=...)`.
+  `use_zero_based` is gone, because it did not change the output.
+- `scan_vcf_genotypes` takes its options only as keyword arguments, and `info_fields` and `sequence_alts_only` replace the keyword arguments of `polars_bio.scan_vcf`.
+  `scan_vcf_genotypes(path, ["S1"])` becomes `scan_vcf_genotypes(path, samples=["S1"])`.
+- `scan_vcf_variants` and `scan_vcf_genotypes` raise a TypeError if `info_fields`, `format_fields` or `samples` is a str, or if it is not a sequence of strings, e.g. a numpy array.
+  `info_fields="AF"` becomes `info_fields=["AF"]`.
