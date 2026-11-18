@@ -2,31 +2,9 @@ from collections.abc import Iterable
 
 from kipoiseq2.dataclasses import Interval, Variant, _check_int, _is_reverse
 from kipoiseq2.extractors.base import SequenceExtractor, _chrom_size
+from kipoiseq2.transforms.functional import reverse_complement
 
 __all__ = ["VariantSeqExtractor"]
-
-# IUPAC complement, the same table as pyfaidx.complement. Other characters
-# are deleted, so a length change reveals them.
-_COMPLEMENT_FROM = "ACTGNactgnYRWSKMDVHBXyrwskmdvhbx"
-_COMPLEMENT_TO = "TGACNtgacnRYWSMKHBDVXrywsmkhbdvx"
-_COMPLEMENT = str.maketrans(
-    _COMPLEMENT_FROM, _COMPLEMENT_TO, "".join(chr(c) for c in range(256) if chr(c) not in _COMPLEMENT_FROM)
-)
-
-
-def reverse_complement(seq: str) -> str:
-    """Reverse complement a DNA sequence with IUPAC codes.
-
-    :param seq: DNA sequence. Upper and lower case are kept.
-    :returns: The reverse complement of ``seq``.
-    :raises ValueError: if ``seq`` contains a character without IUPAC complement.
-    """
-    comp = seq.translate(_COMPLEMENT)
-    if len(comp) != len(seq):
-        invalid = sorted(set(seq) - set(_COMPLEMENT_FROM))
-        raise ValueError("Sequence contains non-DNA characters: {}".format(invalid))
-    return comp[::-1]
-
 
 _OUTSIDE = "\0"
 """Placeholder for a base outside the chromosome. ``extract`` turns it into N or raises a ValueError."""

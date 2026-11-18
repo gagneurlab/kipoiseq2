@@ -4,7 +4,7 @@ import string
 import pytest
 
 from kipoiseq2.dataclasses import Interval
-from kipoiseq2.transforms.functional import fixed_len, pad, translate, trim
+from kipoiseq2.transforms.functional import fixed_len, pad, reverse_complement, translate, trim
 
 
 def test_trim():
@@ -15,6 +15,20 @@ def test_trim():
     assert trim(seq, 5) == "GTTTA"
     assert trim(seq, 5, anchor="start") == "ACGTT"
     assert trim(seq, 5, anchor="end") == "TATNT"
+
+
+def test_reverse_complement():
+    assert reverse_complement("ACGTNacgtn") == "nacgtNACGT"
+    assert reverse_complement("RYKM") == "KMRY"
+    with pytest.raises(ValueError):
+        reverse_complement("AC-GT")
+
+
+@pytest.mark.parametrize("seq", ["ACU", "AC-", "ACé", "ACĀ"])
+def test_reverse_complement_rejects_characters_without_complement(seq):
+    # the translation table keeps the characters above 255, such as Ā
+    with pytest.raises(ValueError, match=f"non-DNA characters: \\['{seq[-1]}'\\]"):
+        reverse_complement(seq)
 
 
 def test_fixed_len():
