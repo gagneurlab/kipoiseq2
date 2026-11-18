@@ -3,35 +3,6 @@ from typing import Iterable, TypeVar
 
 import numpy as np
 
-DNA = ("A", "C", "G", "T")
-RNA = ("A", "C", "G", "U")
-AMINO_ACIDS = (
-    "A",
-    "R",
-    "N",
-    "D",
-    "B",
-    "C",
-    "E",
-    "Q",
-    "Z",
-    "G",
-    "H",
-    "I",
-    "L",
-    "K",
-    "M",
-    "F",
-    "P",
-    "S",
-    "T",
-    "W",
-    "Y",
-    "V",
-)
-
-alphabets = {"DNA": DNA, "RNA": RNA, "AMINO_ACIDS": AMINO_ACIDS}
-
 
 def to_scalar(obj):
     """Convert numpy scalar to native scalar"""

@@ -6,8 +6,9 @@ Sequence extractors and transforms for DNA sequence-based models.
 kipoiseq2 extracts reference and variant sequences from FASTA and VCF files and encodes them for model input, e.g. as one-hot arrays.
 
 kipoiseq2 is the successor of [kipoiseq](https://github.com/kipoi/kipoiseq) without the Kipoi model zoo dataloaders (`kipoiseq.dataloaders`) and without the kipoi dependencies.
-Its sequence extractors, transforms, `Interval` and `Variant` are those of kipoiseq, imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
-kipoiseq2 reads VCF files as polars tables with polars-bio instead of cyvcf2, see [Migrating from kipoiseq](https://github.com/gagneurlab/kipoiseq2/blob/main/MIGRATING.md).
+Its sequence extractors, transforms, `Interval` and `Variant` are based on those of kipoiseq and are imported from `kipoiseq2` instead of `kipoiseq`, so both packages can be installed side by side.
+kipoiseq2 reads VCF files as polars tables with polars-bio instead of cyvcf2.
+[Migrating from kipoiseq](https://github.com/gagneurlab/kipoiseq2/blob/main/MIGRATING.md) lists the differences.
 
 ## Installation
 
@@ -23,16 +24,15 @@ kipoiseq2 does not depend on pandas or pyranges.
 ## Getting started
 
 ```python
-from kipoiseq2 import Interval, Variant
+from kipoiseq2 import Encoder, Interval, Variant
 from kipoiseq2.extractors import FastaStringExtractor, VariantSeqExtractor
-from kipoiseq2.transforms.functional import one_hot_dna
 
 interval = Interval("chr1", 10, 20, strand="+")
 
-# reference sequence
-fasta = FastaStringExtractor("genome.fa", use_strand=True)
+# reference sequence, uppercased because the encoders are case-sensitive
+fasta = FastaStringExtractor("genome.fa", use_strand=True, force_upper=True)
 seq = fasta.extract(interval)  # 10 bp string
-one_hot = one_hot_dna(seq)  # array of shape (10, 4)
+encoded = Encoder().one_hot(seq)  # uint8 array of shape (10, 4)
 
 # sequence with variants applied, anchored at the interval start
 variants = [Variant("chr1", 15, "A", "T")]
@@ -42,6 +42,52 @@ alt_seq = VariantSeqExtractor("genome.fa").extract(interval, variants, anchor=10
 
 `Interval` coordinates are 0-based and half-open, as in BED: `Interval("chr1", 10, 20)` covers the 1-based positions 11 to 20.
 `Variant.start` is `pos - 1` and `Variant.end` is `start + len(ref)`.
+
+### Encoding sequences
+
+`Encoder` one-hot encodes sequences, and `Tokenizer` converts them to integer tokens.
+Each holds the complete configuration of its output and checks it once, so create it once and reuse it.
+Both are frozen and picklable, e.g. for the worker processes of a data loader.
+They take an `Alphabet`: the presets `DNA` (the default), `RNA` and `AMINO_ACIDS`, or your own.
+An `Alphabet` holds the letters of the columns and the letters that each ambiguity code stands for, e.g. `R` for A or G.
+
+```python
+import numpy as np
+from kipoiseq2 import AMINO_ACIDS, DNA, Encoder, Tokenizer
+
+Encoder().one_hot("ACGTNR")  # uint8 array of shape (6, 4), N and R are rows of zeros
+encoder = Encoder(DNA, ambiguous="fractional", dtype=np.float32)
+encoder.one_hot("ACGTNR")  # float32 array of shape (6, 4), N is 0.25 in every column, R is [0.5, 0, 0.5, 0]
+encoder.decode(encoder.one_hot("ACGTNR"))  # "ACGTNR"
+Encoder(DNA, ambiguous="ones").one_hot("NR")  # uint8 array of shape (2, 4), N is [1, 1, 1, 1], R is [1, 0, 1, 0]
+Encoder(AMINO_ACIDS).one_hot("MNX")  # array of shape (3, 20), X is a row of zeros
+Tokenizer().tokenize("ACGTNR")  # array([0, 1, 2, 3, 4, 5], dtype=uint8), the codes follow the letters
+```
+
+The encoders are case-sensitive, and a letter that is not in the alphabet raises a ValueError that names it.
+So with `DNA`, a lowercase letter of a soft-masked repeat raises this ValueError.
+Sequences must be uppercase at the source: uppercase them with `seq.upper()`, or read them with `FastaStringExtractor(force_upper=True)`.
+`DNA` and `RNA` have `N` and the other IUPAC ambiguity codes, e.g. `R` for A or G.
+GRCh37 and GRCh38 contain a few of them besides `N`.
+`Encoder` encodes the codes as rows of zeros by default.
+With `ambiguous="fractional"` and a float dtype, a code of k letters gives 1/k in the columns of its letters.
+With `ambiguous="ones"`, a code gives 1 in the columns of its letters, in any dtype.
+Its rows do not sum to 1, so a model trained on one-hot input sees `N` as a strong signal.
+
+`Tokenizer` gives each code a token of its own after the letters, e.g. 4 for `N` and 5 for `R`.
+Its `token_map` sets other tokens, e.g. the vocabulary of a pretrained model.
+It needs a key for each letter and code of the alphabet, so 15 keys for `DNA`.
+For a vocabulary without the IUPAC ambiguity codes, e.g. the one of HyenaDNA,
+use the strict alphabet `Alphabet(["A", "C", "G", "T"], ambiguous={"N": ["A", "C", "G", "T"]})`.
+For other vectors, index a table with one row per token, e.g. to add a fifth column for the codes:
+
+```python
+# one row per default token: A, C, G and T, then the 11 codes of DNA
+rows = np.zeros((15, 5), dtype=np.float32)
+rows[:4, :4] = np.eye(4)
+rows[4:, 4] = 1
+rows[Tokenizer().tokenize("ACGTNR")]  # float32 array of shape (6, 5)
+```
 
 ### Reading VCF files as tables
 

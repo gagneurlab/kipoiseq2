@@ -1,40 +1,16 @@
 import pytest
 
 import kipoiseq2.transforms
-from kipoiseq2.transforms.transforms import Compose, OneHot, ReorderedOneHot, SplitSplicingSeq
+from kipoiseq2 import Encoder
+from kipoiseq2.transforms.transforms import Compose, DummyAxis, SplitSplicingSeq, SwapAxes
 
 
 # --------------------------------------------
 def test_compose():
-    c = Compose([OneHot()])
+    c = Compose([Encoder().one_hot])
     print(str(c))
     assert c("ACGT").shape == (4, 4)
-
-
-def test_ReorderedOneHot():
-    seqlen = 10
-    seq = "A" * seqlen
-
-    test_pairs = [
-        (("ACGT", 1, None), (10, 4)),
-        (("ACGT", 2, 1), (10, 1, 4)),
-        (("ACGTD", 2, 1), (10, 1, 5)),
-        (("ACGT", 0, None), (4, 10)),
-        (("ACGT", 0, 1), (4, 1, 10)),
-        (("ACGT", 0, 2), (4, 10, 1)),
-    ]
-
-    for args, result in test_pairs:
-        tr = ReorderedOneHot(alphabet=args[0], alphabet_axis=args[1], dummy_axis=args[2])
-        out = tr(seq)
-        assert out.shape == tr.get_output_shape(seqlen)
-        assert out.shape == result
-
-    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
-        ReorderedOneHot(alphabet_axis=1, dummy_axis=1)
-
-    with pytest.raises(ValueError, match="dummy_axis can't be the same as alphabet_axis"):
-        ReorderedOneHot(dummy_axis=1)
+    assert Compose([Encoder().one_hot, DummyAxis(0), SwapAxes(1, 2)])("ACGTN").shape == (1, 4, 5)
 
 
 def test_SplitSplicingSeq():
@@ -78,7 +54,5 @@ def test_transforms_namespace():
         "DummyAxis",
         "SwapAxes",
         "ResizeInterval",
-        "OneHot",
-        "ReorderedOneHot",
         "SplitSplicingSeq",
     }
