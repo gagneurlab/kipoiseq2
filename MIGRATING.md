@@ -87,7 +87,7 @@ The matchers use polars instead of pyranges:
   With `"ones"`, they are 1 in the columns of their bases, e.g. `[1, 0, 1, 0]` for `R`.
   All other unknown letters raise the ValueError.
 - The lookup is case-sensitive, so a lowercase letter, e.g. of a soft-masked repeat, also raises this ValueError.
-  Uppercase the sequence at the source, e.g. with `seq.upper()` or `FastaStringExtractor(force_upper=True)`.
+  Uppercase the sequence at the source, e.g. with `seq.upper()`, or read it with `FastaStringExtractor`, which uppercases by default.
   If the alphabet has the uppercase form of a lowercase letter, the message points to both.
 - The encoders raise a ValueError instead of an AssertionError if the length of `seq` is not a multiple of the letter length.
   They raise a TypeError instead of a ValueError if `seq` is not a str.
@@ -176,3 +176,40 @@ The matchers use polars instead of pyranges:
 - With `anchor="center"`, they keep the letters that `Interval.resize` keeps of an interval from 0 to `len(seq)`, so the result can move by one letter.
   For example, `trim(seq, 7)` of a sequence of 10 letters returns `seq[1:8]` instead of `seq[2:9]`, and `pad("A", 4)` returns `"NANN"` instead of `"NNAN"`.
 - `trim(seq, 0, anchor="end")` returns `""` instead of `seq`.
+- `FastaStringExtractor` and `VariantSeqExtractor` require `use_strand` as a keyword argument.
+  In 0.1, `FastaStringExtractor` defaulted to `use_strand=False` and `VariantSeqExtractor` to `use_strand=True`.
+  To keep the old behavior, pass `use_strand=False` to `FastaStringExtractor` and `use_strand=True` to `VariantSeqExtractor`.
+- `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` raise a TypeError for unknown arguments.
+  In 0.1, they ignored them, so a typo like `fixed_length=False` had no effect.
+- `VariantSeqExtractor(reference, *, use_strand)` takes the reference extractor as its first argument, instead of `fasta_file` or `reference_sequence`.
+  `VariantSeqExtractor(fasta_file=path, use_strand=True)` becomes `VariantSeqExtractor(FastaStringExtractor(path, use_strand=False), use_strand=True)`,
+  and `VariantSeqExtractor(reference_sequence=extractor, use_strand=True)` becomes `VariantSeqExtractor(extractor, use_strand=True)`.
+  It raises a TypeError if `reference` has no method `extract` or no attribute `chrom_sizes`.
+- `BaseExtractor` is gone. A reference extractor needs no base class: any object with the members of the protocol `SequenceExtractor` fits.
+  These are `extract(interval)` and `chrom_sizes`, a mapping of each chromosome name to its length.
+- `VariantSeqExtractor.ref_seq_extractor` and its deprecated alias `fasta` are gone. Keep the reference extractor that you pass instead.
+- `FastaStringExtractor` is a context manager, which closes the FASTA file at the end of a `with` block.
+  `VariantSeqExtractor` opens no file, so it has no `close()`. You close the reference that you pass yourself.
+- `FastaStringExtractor` raises a ValueError for a FASTA file that is compressed with gzip instead of bgzip, and an ImportError for a bgzip file if Biopython is missing.
+  In 0.1, pyfaidx raised an ImportError about Biopython for a gzip file whose name ends in `.gz`, and a UnicodeDecodeError for other gzip files.
+- `force_upper` of `FastaStringExtractor` is now `uppercase=True` by default, so the extracted sequences are uppercase.
+  `Encoder` and `Tokenizer` are case-sensitive, so they take these sequences as they are.
+  Pass `uppercase=False` to keep the lowercase letters of soft-masked repeats. `uppercase` is keyword-only.
+- `FastaStringExtractor.extract` raises a ValueError for an interval that starts before 0 or ends after the end of its chromosome, and for a chromosome that is not in the FASTA file.
+  In 0.1, an interval past the chromosome end gave a shorter sequence, and the other cases raised a pyfaidx `FetchError`.
+  It raises a TypeError if `interval` is not an `Interval`.
+- `FastaStringExtractor.chrom_sizes` maps each chromosome to its length.
+  The pyfaidx object `FastaStringExtractor.fasta` is private: use `chrom_sizes[chrom]` instead of `len(extractor.fasta[chrom])`, and `chrom_sizes.keys()` for the chromosome names.
+- `VariantSeqExtractor.extract` no longer takes `chrom_len`. It reads the length of the chromosome from `reference.chrom_sizes`.
+  If the sequence needs bases before 0 or after the end of the chromosome, it fills them with N for `pad_with_n=True` and raises a ValueError otherwise.
+  In 0.1, without `chrom_len`, the reference returned fewer bases at the chromosome end. For an anchor outside the chromosome, the N were at the wrong end.
+- `VariantSeqExtractor.extract` checks the variants. It raises a ValueError for a variant on another chromosome than `interval`, for a variant outside the chromosome, and for a variant whose REF differs from the reference, ignoring case.
+  In 0.1, it replaced the reference bases at the position of such a variant with its ALT.
+  It raises a TypeError if `interval` is not an `Interval` or a variant is not a `Variant`.
+- `VariantSeqExtractor.extract(interval, variants, *, anchor_pos=None, pad_with_n=False)` takes its options only as keywords.
+  `anchor` and `fixed_len` become `anchor_pos`: `anchor=a` becomes `anchor_pos=a`, and `anchor=a, fixed_len=False` becomes `anchor_pos=None`.
+  `is_padding` is renamed to `pad_with_n`.
+- `VariantSeqExtractor.extract` raises a ValueError unless `interval.start <= anchor_pos <= interval.end`.
+  In 0.1, it moved an anchor outside the interval to the nearest end of the interval.
+- `FastaStringExtractor.extract` and `VariantSeqExtractor.extract` no longer take `use_strand`.
+  Create the extractor with the `use_strand` you need instead.

@@ -8,12 +8,10 @@
 .. automodule:: kipoiseq2.extractors.fasta
    :members:
    :undoc-members:
-   :show-inheritance:
 
 .. automodule:: kipoiseq2.extractors.vcf_seq
    :members:
    :undoc-members:
-   :show-inheritance:
 
 .. automodule:: kipoiseq2.extractors.vcf
    :members:
