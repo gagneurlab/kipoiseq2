@@ -20,33 +20,42 @@ kipoiseq2 reads VCF files with polars-bio instead of cyvcf2, so the `vcf` extra 
 - `query_all().filter(lambda ...)` and `FilterVariantQuery` become a polars filter on `scan_vcf_variants(path)`.
   For example, `filter(lambda v: v.qual > 10)` becomes `.filter(pl.col("qual") > 10)`, and `FilterVariantQuery()` becomes `.filter(pl.col("filter") == "PASS")`.
   polars-bio gives a missing QUAL (`.`) as null and a missing FILTER (`.`) as an empty string.
-- `fetch_variants`, `query_variants`, `get_variant` and `get_variants` become `SingleVariantMatcher` or `MultiVariantsMatcher`, or a filter or join on `scan_vcf_variants(path)`.
+- `fetch_variants`, `query_variants`, `get_variant` and `get_variants` become `scan_variant_pairs`, or a filter or join on `scan_vcf_variants(path)`.
 - `get_samples`, `has_variant` and `to_sample_csv` become `scan_vcf_genotypes(path, format_fields=[...])`, and `.sink_csv(path)` writes the CSV.
   The carrier check works per ALT allele, not per record: a sample with GT 0/2 carries the second ALT allele only.
 - `to_vcf` becomes `polars_bio.sink_vcf`, e.g. `pb.sink_vcf(pb.scan_vcf(path).filter(pl.col("qual") > 10), out_path)`.
 - `VariantIntervalQueryable` and the query classes of `kipoiseq.extractors.vcf_query` are gone: filter the polars frames instead.
-- `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with a matcher, and apply them with `VariantSeqExtractor`.
+- `SingleVariantVCFSeqExtractor` and `SingleSeqVCFSeqExtractor` are gone: match the variants with `scan_variant_pairs`, and apply them with `VariantSeqExtractor`.
 - `Variant.from_cyvcf` and `Variant.from_cyvcf_and_given_alt` are gone.
   A `Variant` has only `chrom`, `pos`, `ref` and `alt`, so `id`, `qual`, `filter`, `info`, `source` and `copy()` are gone.
   The VCF columns ID, QUAL, FILTER and INFO stay in the frame of `scan_vcf_variants`.
 
-The matchers use polars instead of pyranges:
-- `SingleVariantMatcher` and `MultiVariantsMatcher` take the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end` and optionally `strand`, instead of `pranges`. `intervals` also takes a sequence of Interval objects.
+`SingleVariantMatcher` and `MultiVariantsMatcher` become one function, `scan_variant_pairs(intervals, variants)`, which uses polars instead of pyranges:
+- `scan_variant_pairs` returns the interval-variant pairs as a polars LazyFrame, with the interval columns, `interval_idx`, the `variant_` columns and `variant_idx`.
+  The matchers were iterable and yielded Interval and Variant objects. Build these objects from the rows of the pairs instead:
+  ```python
+  pairs = scan_variant_pairs(intervals, scan_vcf_variants(path)).collect().sort("variant_idx", "interval_idx")
+  for r in pairs.iter_rows(named=True):
+      interval = Interval(r["chrom"], r["start"], r["end"], strand=r["strand"])
+      variant = Variant(r["chrom"], r["variant_pos"], r["variant_ref"], r["variant_alt"])
+  ```
+  The sort gives the pairs in VCF order, and per variant in the order of the intervals. `SingleVariantMatcher` grouped them by chromosome and strand.
+  For the variants of each interval, as `MultiVariantsMatcher` gave them, group the pairs by `interval_idx`. An interval without variants has no pairs.
+- `scan_variant_pairs` takes the intervals as `intervals`, a polars DataFrame with the columns `chrom`, `start`, `end`, optionally `strand` and any other columns, instead of `pranges`.
   For a PyRanges object `pr`, pass `intervals=pl.from_pandas(pr.df).rename({"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"})`.
-- The matcher attribute `pr` becomes `intervals`: a polars DataFrame with the columns `chrom`, `start`, `end`, `strand` and the `interval_attrs` columns, instead of a PyRanges object.
-  In `MultiVariantsMatcher`, `intervals` was a list of Interval objects and is now this DataFrame too.
+  For a list of Interval objects, pass `pl.DataFrame(intervals)`.
+- The matcher attribute `pr` is gone, because `scan_variant_pairs` returns only the pairs.
 - `gtf_path` and `bed_path` are gone. Read the file yourself, e.g. with polars-bio, and pass the frame as `intervals`.
-- `variant_fetcher` and `VariantFetcher` are gone. Pass the path of a VCF file as `vcf_file`, or a polars frame or Variant objects as `variants`.
-  Arguments after `variants` are keyword-only.
-- `SingleVariantMatcher` yields the pairs in VCF order instead of grouped by chromosome and strand.
-  With a sequence of Interval objects as `intervals`, it yields these objects, so they keep their attrs.
-- With a VCF file or a polars frame as the variant source, the matchers yield new Variant objects with chrom, pos, ref and alt, and without `source`.
+- `variant_fetcher`, `VariantFetcher` and `vcf_file` are gone. Pass a polars frame as `variants`, e.g. `scan_vcf_variants(path)`.
+  For a list of Variant objects, pass `pl.DataFrame(variants)`.
+- `interval_attrs` is gone, because the pairs keep all columns of `intervals`.
+  The pairs also keep all columns of `variants`, with the prefix `variant_`, e.g. `variant_qual` and `variant_filter` of `scan_vcf_variants`.
   For the genotypes of the samples, use `scan_vcf_genotypes`.
-- `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by `pairs()`, `scan_pairs()` and `iter_batches()`.
-  `pairs()` returns all pairs as a polars DataFrame, `scan_pairs()` as a LazyFrame, and `iter_batches()` yields one DataFrame per batch of variants.
-- `MultiVariantsMatcher` finds the variants of all intervals with one overlap join instead of one VCF query per interval.
-- `variants_to_pyranges`, `intervals_to_pyranges` and `pyranges_to_intervals` are replaced by `variants_to_polars` and `intervals_to_polars`.
-  `PyrangesVariantFetcher` is gone: pass the variants as `variants`.
+- `SingleVariantMatcher.iter_pyranges` and `iter_rows` are replaced by the LazyFrame of `scan_variant_pairs`.
+  Collect it with `collect()`, write it with `sink_parquet(path)`, or process it in batches with `collect_batches(chunk_size=n)`.
+- `scan_variant_pairs` finds the variants of all intervals with one overlap join. `MultiVariantsMatcher` ran one VCF query per interval.
+- `variants_to_pyranges`, `intervals_to_pyranges`, `pyranges_to_intervals` and `PyrangesVariantFetcher` are gone.
+  Build the frames from objects with `pl.DataFrame(variants)` and `pl.DataFrame(intervals)`.
 
 ## Breaking changes in 0.2
 
@@ -130,11 +139,12 @@ The matchers use polars instead of pyranges:
   `Encoder().one_hot(seq)` returns an array of shape `(len(seq), 4)`, `np.expand_dims(x, axis)` inserts an axis of length 1, and `np.swapaxes(x, axis1, axis2)` swaps two axes.
   For example, `ReorderedOneHot(alphabet_axis=0, dummy_axis=1)`, with the shape `(4, 1, len(seq))`, becomes `np.swapaxes(np.expand_dims(Encoder().one_hot(seq), 1), 0, 2)`.
   `ReorderedOneHot.get_output_shape` has no replacement.
-- `Interval` is immutable. Its fields cannot be reassigned, `attrs` is a read-only copy of the given mapping, and `copy()` is gone.
-  To change a field, use `dataclasses.replace`, e.g. `replace(interval, attrs={**interval.attrs, "gene_id": "g1"})`.
-- `Interval` takes `strand` and `attrs` only as keywords.
+- `Interval` is immutable. Its fields cannot be reassigned, and `copy()` is gone.
+  To change a field, use `dataclasses.replace`, e.g. `replace(interval, strand="+")`.
+- `Interval` takes `strand` only as a keyword.
   In 0.1, `Interval("chr1", 0, 10, "-")` set `name` to `"-"` and kept the strand `"."`.
-- `Interval.name` and `Interval.score` are gone. Keep them in `attrs`, e.g. `Interval("chr1", 0, 10, attrs={"name": "a", "score": 1.5})`.
+- `Interval.name`, `Interval.score` and `Interval.attrs` are gone, so an `Interval` has only `chrom`, `start`, `end` and `strand`.
+  Keep the other fields in the columns of a polars frame, e.g. in the `intervals` of `scan_variant_pairs`.
 - `Interval` checks its fields. It raises a TypeError if `start` or `end` is not an int, e.g. `10.0`.
   It raises a ValueError if `start` is greater than `end`, or if `strand` is not `"+"`, `"-"` or `"."`.
   Methods that would return such an interval raise the same ValueError, e.g. `slop` that removes more bases than the width, or `truncate` of an interval that starts after `chrom_len`.
@@ -146,9 +156,8 @@ The matchers use polars instead of pyranges:
   `interval.is_valid(chrom_len)` becomes `0 <= interval.start and interval.end <= chrom_len`.
 - `Interval.truncate` requires `chrom_len`, and `chrom_len` must be an int, not a float such as `math.inf`.
   `interval.truncate()` without `chrom_len` becomes `replace(interval, start=max(interval.start, 0))`.
-- Two intervals are equal if all their fields are equal, including `attrs`. The hash leaves out `attrs`.
-  In 0.1, `==` compared only `chrom`, `start`, `end` and `strand`, also with other objects that have these attributes.
-  To compare the locations, compare `(i.chrom, i.start, i.end, i.strand)`.
+- An `Interval` is equal only to an `Interval` with the same fields.
+  In 0.1, `==` compared `chrom`, `start`, `end` and `strand` also with other objects that have these attributes.
 - `use_strand` of `Interval.center` and `Interval.shift` is keyword-only, e.g. `interval.shift(10, use_strand=False)` instead of `interval.shift(10, False)`.
   The parameter `x` of `shift` is renamed to `offset`. `Interval.slop` takes `upstream`, `downstream` and `use_strand` only as keywords.
 - `Interval.center(use_strand=False)` returns the center of the unstranded interval, so it rounds a center in the middle of a base up instead of down.
@@ -245,3 +254,22 @@ The matchers use polars instead of pyranges:
   `scan_vcf_genotypes(path, ["S1"])` becomes `scan_vcf_genotypes(path, samples=["S1"])`.
 - `scan_vcf_variants` and `scan_vcf_genotypes` raise a TypeError if `info_fields`, `format_fields` or `samples` is a str, or if it is not a sequence of strings, e.g. a numpy array.
   `info_fields="AF"` becomes `info_fields=["AF"]`.
+- `SingleVariantMatcher`, `MultiVariantsMatcher` and `BaseVariantMatcher` become one function, `scan_variant_pairs(intervals, variants)`.
+  It returns the pairs as a polars LazyFrame, with the columns of `pairs()`, in no fixed order.
+  `SingleVariantMatcher(path, intervals=exons).pairs()` becomes `scan_variant_pairs(exons, scan_vcf_variants(path)).collect().sort("variant_idx", "interval_idx")`, and `scan_pairs()` becomes `scan_variant_pairs(...)`.
+- `vcf_file` is gone: pass `scan_vcf_variants(path)` as `variants` instead.
+- `scan_variant_pairs` takes only polars frames: `intervals` is a DataFrame, and `variants` is a DataFrame or LazyFrame.
+  For lists of Interval or Variant objects, pass `pl.DataFrame(intervals)` or `pl.DataFrame(variants)`.
+- The matchers were iterable, and the pairs are no longer Interval and Variant objects. To build these objects, loop over the rows of the pairs, as shown in the kipoiseq section above.
+  For the variants of each interval, as `MultiVariantsMatcher` gave them, group the pairs by `interval_idx`.
+- `variant_batch_size` and `iter_batches(batch_size=n)` become `scan_variant_pairs(...).collect_batches(chunk_size=n)`.
+  A batch holds `n` pairs instead of the pairs of `n` variants, so the pairs of one variant can be in two batches.
+- `intervals_to_polars`, `variants_to_polars` and `overlap_variants` are gone.
+  `pl.DataFrame(intervals)` and `pl.DataFrame(variants)` replace the converters, and `scan_variant_pairs(intervals, variants).collect().sort("variant_idx", "interval_idx")` replaces `overlap_variants`.
+- `interval_attrs` is gone, because the pairs keep all columns of the `intervals` DataFrame.
+  To keep fewer columns, select them first: `interval_attrs=["exon_id"]` becomes `scan_variant_pairs(exons.select("chrom", "start", "end", "strand", "exon_id"), variants)`.
+  In 0.1, the pairs had only `chrom`, `start`, `end`, `strand` and the `interval_attrs` columns.
+- `scan_variant_pairs` raises a ValueError if `intervals` has a column named `interval_idx` or starting with `variant_`, or if `variants` has a column named `idx` or `variant_idx`, because the pairs use these names.
+- A null strand in `intervals` gives the strand `"."` in the pairs, as a missing strand column.
+- With `scan_vcf_variants(path)` as `variants`, the pairs keep all its columns, e.g. `variant_qual` and `variant_filter`.
+  `vcf_file` kept only the coordinates, `variant_ref`, `variant_alt` and `variant_allele_idx`.

@@ -15,7 +15,7 @@ def test_compose():
 
 
 def test_ResizeInterval():
-    interval = Interval("chr2", 10, 20, strand="-", attrs={"name": "intname"})
+    interval = Interval("chr2", 10, 20, strand="-")
     assert ResizeInterval(4)(interval) == interval.resize(4)
     for width in [3, 4, 13]:
         for anchor in ["start", "center", "end"]:
