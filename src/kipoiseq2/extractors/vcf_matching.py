@@ -19,6 +19,7 @@ from kipoiseq2.extractors._polars import _import_polars
 
 if TYPE_CHECKING:
     import polars as pl
+    from polars import LazyFrame
 
 __all__ = ["scan_variant_pairs"]
 
@@ -138,7 +139,8 @@ def scan_variant_pairs(intervals: pl.DataFrame, variants: Union[pl.DataFrame, pl
     # polars-bio registers the config_meta namespace at import, so mypy does not know it.
     df1.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
     df2.config_meta.set(coordinate_system_zero_based=True)  # type: ignore[attr-defined]
-    joined = pb.overlap(
+    # polars-bio has no type annotations. The local pl is a variable, so the annotation uses LazyFrame, not pl.LazyFrame.
+    joined: LazyFrame = pb.overlap(
         df1,
         df2,
         cols1=["chrom", "start", "end"],

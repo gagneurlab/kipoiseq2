@@ -16,6 +16,7 @@ from kipoiseq2.extractors._polars import _import_polars
 
 if TYPE_CHECKING:
     import polars as pl
+    from polars import LazyFrame
 
 __all__ = ["scan_vcf_variants", "scan_vcf_genotypes"]
 
@@ -26,7 +27,7 @@ _SEQUENCE_ALT = "(?i)^[ACGTN]+$"
 """Regex of the ALT alleles that are sequences of bases: A, C, G, T and N, in any case."""
 
 
-def _check_names(names, name):
+def _check_names(names: object, name: str) -> None:
     """Check that ``names`` is a sequence of strings, but not a str.
 
     :param names: the value of the argument ``name``
@@ -53,7 +54,8 @@ def _scan_vcf(
     """Return the rows of :func:`scan_vcf_variants`, with the FORMAT fields of ``polars_bio.scan_vcf``."""
     _check_names(info_fields, "info_fields")
     pl, pb = _import_polars()
-    scan = pb.scan_vcf(
+    # polars-bio has no type annotations. The local pl is a variable, so the annotation uses LazyFrame, not pl.LazyFrame.
+    scan: LazyFrame = pb.scan_vcf(
         os.fspath(path),
         use_zero_based=True,
         info_fields=list(info_fields),
