@@ -1,10 +1,12 @@
+import itertools
 import re
 import string
 
+import numpy as np
 import pytest
 
 from kipoiseq2.dataclasses import Interval
-from kipoiseq2.transforms.functional import fixed_len, pad, reverse_complement, translate, trim
+from kipoiseq2.transforms import TRANSLATION_TABLE, fixed_len, pad, reverse_complement, translate, trim
 
 
 def test_trim():
@@ -120,10 +122,56 @@ def test_translate():
     assert translate("ATGTGGTAA") == "MW_"
     # TGA is a stop codon, and translation continues after it
     assert translate("ATGTGACCC") == "M_P"
+    assert translate("") == ""
     with pytest.raises(ValueError):
         translate("ATGT")
-    with pytest.raises(KeyError):
+
+
+def test_translate_is_case_sensitive():
+    # the message names the lowercase codons and hints at their uppercase forms
+    expected = (
+        "seq contains codons that are not in genetic code 1: ['AtG', 'atg']. "
+        "The lookup is case-sensitive, but genetic code 1 has the uppercase forms of ['AtG', 'atg']: "
+        "uppercase the sequence with seq.upper(), or read it with FastaStringExtractor, which uppercases by default"
+    )
+    with pytest.raises(ValueError, match=f"^{re.escape(expected)}$"):
+        translate("atgAtGTAA")
+    with pytest.raises(ValueError, match=re.escape("not in genetic code 2: ['aga']")):
+        translate("AGAaga", transl_table=2)
+    # a translation exception covers a lowercase codon
+    assert translate("atgTGGTAA", transl_except={1: "M"}) == "MW_"
+
+
+def test_translate_unknown_codons():
+    # the message names the codons as they are in seq
+    with pytest.raises(ValueError, match=re.escape("not in genetic code 1: ['ATN', 'atn']")):
+        translate("ATGATNatnATN")
+    with pytest.raises(ValueError, match=re.escape("['NNN']")):
         translate("ATGNNN")
+
+
+def test_translate_keyword_only():
+    with pytest.raises(TypeError):
+        translate("ATG", 1)
+    with pytest.raises(TypeError):
+        translate("ATG", 1, {1: "M"})
+
+
+@pytest.mark.parametrize(
+    "seq, kwargs, match",
+    [
+        (b"ATG", {}, "^seq must be a str, not bytes$"),
+        ("ATG", {"transl_table": "1"}, "^transl_table must be an int, not str$"),
+        ("ATG", {"transl_table": True}, "^transl_table must be an int, not bool$"),
+        ("ATG", {"transl_except": [(1, "M")]}, "^transl_except must be a mapping or None, not list$"),
+        ("ATG", {"transl_except": {1.0: "M"}}, "^transl_except position must be an int, not float$"),
+        ("ATG", {"transl_except": {True: "M"}}, "^transl_except position must be an int, not bool$"),
+        ("ATG", {"transl_except": {1: 77}}, "^transl_except amino acid must be a str, not int$"),
+    ],
+)
+def test_translate_invalid_types(seq, kwargs, match):
+    with pytest.raises(TypeError, match=match):
+        translate(seq, **kwargs)
 
 
 def test_translate_transl_table():
@@ -131,6 +179,7 @@ def test_translate_transl_table():
     assert translate(seq) == "RRI_"
     assert translate(seq, transl_table=11) == translate(seq, transl_table=1)
     assert translate(seq, transl_table=2) == "__MW"
+    assert translate(seq, transl_table=np.int64(2)) == "__MW"
     with pytest.raises(ValueError, match=r"\[1, 2, 11\]"):
         translate(seq, transl_table=3)
 
@@ -140,8 +189,9 @@ def test_translate_transl_except():
     assert translate("ATGTGATGATAA", transl_except={2: "U"}) == "MU__"
     # non-AUG start
     assert translate("ACGTGG", transl_except={1: "M"}) == "MW"
-    # an exception codon is not looked up in the table
+    # an exception codon is not looked up in the genetic code
     assert translate("ATGNNN", transl_except={2: "X"}) == "MX"
+    assert translate("ATGTGA", transl_except={np.int64(2): "U"}) == "MU"
 
 
 def test_translate_transl_except_partial_codon():
@@ -155,3 +205,11 @@ def test_translate_transl_except_partial_codon():
 def test_translate_invalid_transl_except(transl_except):
     with pytest.raises(ValueError):
         translate("ATGTGA", transl_except=transl_except)
+
+
+def test_translation_table():
+    codons = ["".join(codon) for codon in itertools.product("ACGT", repeat=3)]
+    assert sorted(TRANSLATION_TABLE) == codons
+    assert translate("".join(codons)) == "".join(TRANSLATION_TABLE[codon] for codon in codons)
+    with pytest.raises(TypeError):
+        TRANSLATION_TABLE["TGA"] = "U"
